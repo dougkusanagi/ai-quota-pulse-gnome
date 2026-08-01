@@ -14,3 +14,4 @@ class UsageProvider(Protocol):
 
     def fetch(self) -> UsageSnapshot:
         """Return the latest snapshot without mutating the UI."""
+        ...
