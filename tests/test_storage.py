@@ -9,9 +9,7 @@ def test_config_store_round_trips_manual_entry(tmp_path) -> None:
     config = AppConfig(
         refresh_seconds=5,
         position=(100, 200),
-        manual_entries=[
-            ManualUsage("main", "ChatGPT", 63, datetime(2026, 8, 1, 14, tzinfo=UTC))
-        ],
+        manual_entries=[ManualUsage("main", "ChatGPT", 63, datetime(2026, 8, 1, 14, tzinfo=UTC))],
     )
     store = ConfigStore(path)
     store.save(config)
