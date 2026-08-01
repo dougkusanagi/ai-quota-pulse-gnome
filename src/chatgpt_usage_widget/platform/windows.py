@@ -141,8 +141,8 @@ def apply_window_style(hwnd: int, always_on_top: bool = True) -> None:
     exstyle &= ~0x00040000  # WS_EX_APPWINDOW
     set_window_long(hwnd, -20, exstyle)
     # SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW |
-    # SWP_FRAMECHANGED. The z-order move is kept separate so WinEvent hooks
-    # can reassert it without repeatedly changing the window style.
+    # SWP_FRAMECHANGED. The z-order move is kept separate so the periodic
+    # reassertion does not repeatedly change the window style.
     user32.SetWindowPos(
         hwnd,
         -1 if always_on_top else -2,
@@ -152,84 +152,6 @@ def apply_window_style(hwnd: int, always_on_top: bool = True) -> None:
         0,
         0x0001 | 0x0002 | 0x0010 | 0x0020 | 0x0040,
     )
-
-
-class TopmostWatcher:
-    """Reassert topmost immediately when Explorer or another app changes z-order."""
-
-    _EVENT_SYSTEM_FOREGROUND = 0x0003
-    _EVENT_SYSTEM_MENUPOPUPSTART = 0x0006
-    _EVENT_SYSTEM_MENUPOPUPEND = 0x0007
-    _EVENT_OBJECT_SHOW = 0x8002
-    _EVENT_OBJECT_HIDE = 0x8003
-    _WINEVENT_OUTOFCONTEXT = 0x0000
-
-    def __init__(self, hwnd: int) -> None:
-        self.hwnd = hwnd
-        self._hooks: list[int] = []
-        self._callback: Any = None
-        self._suspended = False
-
-    def start(self) -> None:
-        if os.name != "nt" or self._hooks:
-            return
-        user32 = ctypes.windll.user32
-        callback_type = ctypes.WINFUNCTYPE(
-            None,
-            ctypes.c_void_p,
-            ctypes.c_uint,
-            ctypes.c_void_p,
-            ctypes.c_long,
-            ctypes.c_long,
-            ctypes.c_uint,
-            ctypes.c_uint,
-        )
-
-        def on_event(
-            _hook: int,
-            _event: int,
-            _hwnd: int,
-            _object_id: int,
-            _child_id: int,
-            _event_thread: int,
-            _timestamp: int,
-        ) -> None:
-            if not self._suspended:
-                set_window_topmost(self.hwnd, True)
-
-        self._callback = callback_type(on_event)
-        user32.SetWinEventHook.restype = ctypes.c_void_p
-        for event_min, event_max in (
-            (self._EVENT_SYSTEM_FOREGROUND, self._EVENT_SYSTEM_FOREGROUND),
-            (self._EVENT_SYSTEM_MENUPOPUPSTART, self._EVENT_SYSTEM_MENUPOPUPEND),
-            (self._EVENT_OBJECT_SHOW, self._EVENT_OBJECT_HIDE),
-        ):
-            hook = user32.SetWinEventHook(
-                event_min,
-                event_max,
-                None,
-                self._callback,
-                0,
-                0,
-                self._WINEVENT_OUTOFCONTEXT,
-            )
-            if hook:
-                self._hooks.append(int(hook))
-
-    def suspend(self) -> None:
-        self._suspended = True
-
-    def resume(self) -> None:
-        self._suspended = False
-        set_window_topmost(self.hwnd, True)
-
-    def close(self) -> None:
-        if os.name == "nt":
-            user32 = ctypes.windll.user32
-            for hook in self._hooks:
-                user32.UnhookWinEvent(ctypes.c_void_p(hook))
-        self._hooks.clear()
-        self._callback = None
 
 
 def is_window_visible_on_work_area(

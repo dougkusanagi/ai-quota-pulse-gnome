@@ -9,11 +9,11 @@ from datetime import UTC, datetime
 
 from .domain import SnapshotStatus, UsageItem, UsageSnapshot
 from .platform.windows import (
-    TopmostWatcher,
     anchored_position,
     apply_window_style,
     get_taskbar_geometry,
     is_window_visible_on_work_area,
+    set_window_topmost,
 )
 from .providers.demo import DemoProvider
 from .providers.manual import ManualProvider, ManualUsage
@@ -30,6 +30,7 @@ DIM = "#A6A6A6"
 ACCENT = "#10A37F"
 ERROR = "#E35D6A"
 WARNING = "#E8A83E"
+TOPMOST_REASSERT_MS = 100
 
 
 def parse_reset_input(value: str) -> datetime | None:
@@ -177,7 +178,6 @@ class UsageWidget:
         )
         self._menu: tk.Menu | None = None
         self._topmost_var = tk.BooleanVar(value=self.config.always_on_top)
-        self._topmost_watcher: TopmostWatcher | None = None
         self._build_shell()
         self.root.bind("<Map>", self._reassert_topmost)
         self.root.bind("<Visibility>", self._reassert_topmost)
@@ -198,18 +198,15 @@ class UsageWidget:
         self._place_window()
         self.root.deiconify()
         self._reassert_topmost()
-        self._topmost_watcher = TopmostWatcher(self.root.winfo_id())
-        self._topmost_watcher.start()
         self.refresh_now()
         self.root.after(1000, self._tick)
+        self.root.after(TOPMOST_REASSERT_MS, self._topmost_tick)
         self.root.after(self.config.refresh_seconds * 1000, self._scheduled_refresh)
 
     def run(self) -> None:
         self.root.mainloop()
 
     def close(self) -> None:
-        if self._topmost_watcher is not None:
-            self._topmost_watcher.close()
         self._save_config()
         self.root.destroy()
 
@@ -237,8 +234,15 @@ class UsageWidget:
 
     def _reassert_topmost(self, _event: tk.Event[tk.Misc] | None = None) -> None:
         if self.config.always_on_top and self.root.winfo_exists():
-            self.root.attributes("-topmost", True)
-            apply_window_style(self.root.winfo_id(), True)
+            set_window_topmost(self.root.winfo_id(), True)
+
+    def _topmost_tick(self) -> None:
+        if not self.root.winfo_exists():
+            return
+        menu_open = self._menu is not None and self._menu.winfo_exists()
+        if not menu_open:
+            self._reassert_topmost()
+        self.root.after(TOPMOST_REASSERT_MS, self._topmost_tick)
 
     def _render(self, snapshot: UsageSnapshot) -> None:
         self._snapshot = snapshot
@@ -317,8 +321,6 @@ class UsageWidget:
         self._drag_origin = None
 
     def open_menu(self) -> None:
-        if self._topmost_watcher is not None:
-            self._topmost_watcher.suspend()
         if self._menu is not None:
             self._menu.destroy()
         menu = tk.Menu(
@@ -343,7 +345,6 @@ class UsageWidget:
         menu.add_separator()
         menu.add_command(label="Sair", command=self.close)
         self._menu = menu
-        menu.bind("<Unmap>", lambda _event: self._resume_topmost_watcher())
         try:
             menu.tk_popup(
                 self.root.winfo_rootx() + self.root.winfo_width() - 12,
@@ -351,10 +352,6 @@ class UsageWidget:
             )
         finally:
             menu.grab_release()
-
-    def _resume_topmost_watcher(self) -> None:
-        if self._topmost_watcher is not None:
-            self._topmost_watcher.resume()
 
     def toggle_topmost(self) -> None:
         self.config.always_on_top = bool(self._topmost_var.get())
