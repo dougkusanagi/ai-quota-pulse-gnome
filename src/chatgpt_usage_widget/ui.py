@@ -1,0 +1,516 @@
+"""Tkinter user interface for the compact Windows widget."""
+
+from __future__ import annotations
+
+import logging
+import tkinter as tk
+from datetime import UTC, datetime
+
+from .domain import SnapshotStatus, UsageItem, UsageSnapshot
+from .platform.windows import (
+    anchored_position,
+    apply_window_style,
+    get_taskbar_geometry,
+    is_window_visible_on_work_area,
+)
+from .providers.demo import DemoProvider
+from .providers.manual import ManualProvider, ManualUsage
+from .services import UsageService
+from .storage import AppConfig, ConfigStore
+
+LOGGER = logging.getLogger("chatgpt_usage_widget.ui")
+
+BG = "#171717"
+CARD_BG = "#232323"
+BAR_BG = "#3B3B3B"
+FG = "#F2F2F2"
+DIM = "#A6A6A6"
+ACCENT = "#10A37F"
+ERROR = "#E35D6A"
+WARNING = "#E8A83E"
+
+
+def parse_reset_input(value: str) -> datetime | None:
+    """Parse local reset input accepted by the configuration dialog."""
+
+    value = value.strip()
+    if not value:
+        return None
+    candidates = ("%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M", "%d/%m/%y %H:%M")
+    parsed: datetime | None = None
+    local_tz = datetime.now().astimezone().tzinfo or UTC
+    for fmt in candidates:
+        try:
+            parsed = datetime.strptime(value, fmt).replace(tzinfo=local_tz)
+            break
+        except ValueError:
+            continue
+    if parsed is None:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("Use DD/MM/AAAA HH:MM ou AAAA-MM-DD HH:MM") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=local_tz)
+    return parsed
+
+
+class UsageCard(tk.Frame):
+    """A single compact usage card."""
+
+    def __init__(self, parent: tk.Misc, item: UsageItem) -> None:
+        super().__init__(
+            parent,
+            bg=CARD_BG,
+            padx=10,
+            pady=7,
+            highlightthickness=1,
+            highlightbackground="#343434",
+        )
+        self.item = item
+        self._label = tk.Label(
+            self,
+            text=item.label,
+            bg=CARD_BG,
+            fg=FG,
+            font=("Segoe UI", 9, "bold"),
+            anchor="w",
+        )
+        self._label.grid(row=0, column=0, sticky="w")
+        self._percent = tk.Label(
+            self,
+            text=f"{item.used_percent:.0f}%",
+            bg=CARD_BG,
+            fg=FG,
+            font=("Segoe UI", 10, "bold"),
+        )
+        self._percent.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self._bar = tk.Canvas(
+            self, width=142, height=10, bg=CARD_BG, highlightthickness=0
+        )
+        self._bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 3))
+        self._reset = tk.Label(
+            self,
+            text=self._reset_text(),
+            bg=CARD_BG,
+            fg=DIM,
+            font=("Segoe UI", 8),
+            anchor="w",
+        )
+        self._reset.grid(row=2, column=0, columnspan=2, sticky="w")
+        self.columnconfigure(0, weight=1)
+        self._bar.bind("<Configure>", lambda _event: self._draw_bar())
+        self._draw_bar()
+
+    def _reset_text(self) -> str:
+        return f"↻ {self.item.reset_text()} · {self.item.countdown()}"
+
+    def update_item(self, item: UsageItem) -> None:
+        self.item = item
+        self._label.configure(text=item.label)
+        self._percent.configure(text=f"{item.used_percent:.0f}%")
+        self._reset.configure(text=self._reset_text())
+        self._draw_bar()
+
+    def update_countdown(self) -> None:
+        self._reset.configure(text=self._reset_text())
+
+    def _draw_bar(self) -> None:
+        width = max(1, self._bar.winfo_width())
+        height = max(1, self._bar.winfo_height())
+        radius = height // 2
+        self._bar.delete("all")
+        self._rounded_rect(0, 0, width, height, radius, BAR_BG)
+        fill_width = int(width * self.item.used_percent / 100)
+        if fill_width > 0:
+            self._rounded_rect(
+                0, 0, max(fill_width, radius * 2), height, radius, self._color()
+            )
+
+    def _color(self) -> str:
+        if self.item.used_percent >= 90:
+            return "#E35D6A"
+        if self.item.used_percent >= 75:
+            return "#E8A83E"
+        return self.item.color or ACCENT
+
+    def _rounded_rect(
+        self, x1: int, y1: int, x2: int, y2: int, radius: int, color: str
+    ) -> None:
+        self._bar.create_rectangle(
+            x1 + radius, y1, x2 - radius, y2, fill=color, outline=color
+        )
+        self._bar.create_oval(x1, y1, x1 + radius * 2, y2, fill=color, outline=color)
+        self._bar.create_oval(x2 - radius * 2, y1, x2, y2, fill=color, outline=color)
+
+
+class UsageWidget:
+    """Own the Tk root, render snapshots and persist user interactions."""
+
+    def __init__(
+        self, service: UsageService, store: ConfigStore, config: AppConfig
+    ) -> None:
+        self.service = service
+        self.store = store
+        self.config = config
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.root.title("ChatGPT Usage")
+        self.root.configure(bg=BG)
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", config.always_on_top)
+        try:
+            self.root.attributes("-alpha", 0.97)
+        except tk.TclError:
+            pass
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.bind("<Escape>", lambda _event: self.close())
+        self._drag_origin: tuple[int, int] | None = None
+        self._cards: list[UsageCard] = []
+        self._snapshot: UsageSnapshot = UsageSnapshot(
+            status=SnapshotStatus.LOADING, source="widget"
+        )
+        self._menu: tk.Menu | None = None
+        self._build_shell()
+        self.root.after_idle(self._finish_setup)
+
+    def _build_shell(self) -> None:
+        self._shell = tk.Frame(self.root, bg=BG, padx=7, pady=6)
+        self._shell.pack(fill="both", expand=True)
+        self._header = tk.Frame(self._shell, bg=BG)
+        self._header.pack(fill="x")
+        self._title = tk.Label(
+            self._header,
+            text="◉  ChatGPT",
+            bg=BG,
+            fg=FG,
+            font=("Segoe UI", 9, "bold"),
+            cursor="fleur",
+        )
+        self._title.pack(side="left", padx=(2, 8))
+        self._source = tk.Label(
+            self._header, text="", bg=BG, fg=DIM, font=("Segoe UI", 8), cursor="fleur"
+        )
+        self._source.pack(side="left")
+        self._refresh_button = tk.Button(
+            self._header,
+            text="↻",
+            command=self.refresh_now,
+            bg=BG,
+            fg=FG,
+            activebackground="#303030",
+            activeforeground=FG,
+            relief="flat",
+            bd=0,
+            padx=3,
+            pady=0,
+            font=("Segoe UI", 11),
+            cursor="hand2",
+        )
+        self._refresh_button.pack(side="right")
+        self._menu_button = tk.Button(
+            self._header,
+            text="☰",
+            command=self.open_menu,
+            bg=BG,
+            fg=FG,
+            activebackground="#303030",
+            activeforeground=FG,
+            relief="flat",
+            bd=0,
+            padx=3,
+            pady=0,
+            font=("Segoe UI", 10),
+            cursor="hand2",
+        )
+        self._menu_button.pack(side="right")
+        for widget in (self._title, self._source):
+            widget.bind("<ButtonPress-1>", self._start_drag)
+            widget.bind("<B1-Motion>", self._drag)
+            widget.bind("<ButtonRelease-1>", self._finish_drag)
+        self._body = tk.Frame(self._shell, bg=BG)
+        self._body.pack(fill="both", expand=True, pady=(4, 0))
+        self._status = tk.Label(
+            self._shell,
+            text="Carregando…",
+            bg=BG,
+            fg=DIM,
+            font=("Segoe UI", 8),
+            anchor="w",
+        )
+        self._status.pack(fill="x", padx=3, pady=(3, 0))
+
+    def _finish_setup(self) -> None:
+        self.root.update_idletasks()
+        self._place_window()
+        apply_window_style(self.root.winfo_id(), self.config.always_on_top)
+        self.root.deiconify()
+        self.refresh_now()
+        self.root.after(1000, self._tick)
+        self.root.after(self.config.refresh_seconds * 1000, self._scheduled_refresh)
+
+    def run(self) -> None:
+        self.root.mainloop()
+
+    def close(self) -> None:
+        self._save_config()
+        self.root.destroy()
+
+    def _save_config(self) -> None:
+        try:
+            self.store.save(self.config)
+        except OSError:
+            LOGGER.exception("Could not save configuration")
+
+    def refresh_now(self) -> None:
+        self._snapshot = self.service.refresh()
+        self._render(self._snapshot)
+
+    def _scheduled_refresh(self) -> None:
+        if self.root.winfo_exists():
+            self.refresh_now()
+            self.root.after(self.config.refresh_seconds * 1000, self._scheduled_refresh)
+
+    def _tick(self) -> None:
+        if not self.root.winfo_exists():
+            return
+        for card in self._cards:
+            card.update_countdown()
+        self.root.after(1000, self._tick)
+
+    def _render(self, snapshot: UsageSnapshot) -> None:
+        self._snapshot = snapshot
+        for child in self._body.winfo_children():
+            child.destroy()
+        self._cards.clear()
+        if snapshot.items:
+            for item in snapshot.items[:3]:
+                card = UsageCard(self._body, item)
+                card.pack(side="left", fill="both", expand=True, padx=3)
+                self._cards.append(card)
+        else:
+            empty = tk.Label(
+                self._body,
+                text="Configure os dados de uso no menu",
+                bg=CARD_BG,
+                fg=FG,
+                padx=14,
+                pady=10,
+                font=("Segoe UI", 9),
+            )
+            empty.pack(fill="both", expand=True, padx=3)
+        source = snapshot.source if snapshot.source else "—"
+        self._source.configure(text=f"· {source}")
+        if snapshot.status is SnapshotStatus.OK:
+            self._status.configure(
+                text=f"Atualizado {snapshot.fetched_at.astimezone().strftime('%H:%M:%S')}",
+                fg=DIM,
+            )
+        elif snapshot.status is SnapshotStatus.LOADING:
+            self._status.configure(text="Carregando…", fg=DIM)
+        else:
+            self._status.configure(
+                text=snapshot.message or "Dados indisponíveis",
+                fg=ERROR if snapshot.status is SnapshotStatus.ERROR else WARNING,
+            )
+        self.root.update_idletasks()
+        self._place_window(resize=True)
+
+    def _place_window(self, resize: bool = False) -> None:
+        if resize:
+            self.root.update_idletasks()
+        width = max(230, self.root.winfo_reqwidth())
+        height = max(72, self.root.winfo_reqheight())
+        geometry = get_taskbar_geometry()
+        if self.config.position and is_window_visible_on_work_area(
+            *self.config.position, width, height, geometry
+        ):
+            x, y = self.config.position
+        else:
+            x, y = anchored_position(
+                width,
+                height,
+                self.config.tray_reserve_px,
+                self.config.anchor_gap_px,
+                geometry,
+                self.root.winfo_screenwidth(),
+                self.root.winfo_screenheight(),
+            )
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _start_drag(self, event: tk.Event[tk.Misc]) -> None:
+        self._drag_origin = (
+            event.x_root - self.root.winfo_x(),
+            event.y_root - self.root.winfo_y(),
+        )
+
+    def _drag(self, event: tk.Event[tk.Misc]) -> None:
+        if self._drag_origin is None:
+            return
+        x = event.x_root - self._drag_origin[0]
+        y = event.y_root - self._drag_origin[1]
+        self.root.geometry(f"+{x}+{y}")
+
+    def _finish_drag(self, _event: tk.Event[tk.Misc]) -> None:
+        if self._drag_origin is not None:
+            self.config.position = (self.root.winfo_x(), self.root.winfo_y())
+            self._save_config()
+        self._drag_origin = None
+
+    def open_menu(self) -> None:
+        if self._menu is not None:
+            self._menu.destroy()
+        menu = tk.Menu(
+            self.root,
+            tearoff=False,
+            bg="#252525",
+            fg=FG,
+            activebackground="#3A3A3A",
+            activeforeground=FG,
+            bd=0,
+        )
+        menu.add_command(label="Atualizar agora", command=self.refresh_now)
+        menu.add_command(
+            label="Configurar uso manual…", command=self.show_manual_dialog
+        )
+        menu.add_command(label="Usar dados de demonstração", command=self.use_demo)
+        menu.add_separator()
+        menu.add_command(label="Reancorar antes da tray", command=self.reanchor)
+        menu.add_checkbutton(
+            label="Sempre no topo",
+            variable=tk.BooleanVar(value=self.config.always_on_top),
+            command=self.toggle_topmost,
+        )
+        menu.add_separator()
+        menu.add_command(label="Sair", command=self.close)
+        self._menu = menu
+        try:
+            menu.tk_popup(
+                self.root.winfo_rootx() + self.root.winfo_width() - 12,
+                self.root.winfo_rooty() + self.root.winfo_height(),
+            )
+        finally:
+            menu.grab_release()
+
+    def toggle_topmost(self) -> None:
+        self.config.always_on_top = not self.config.always_on_top
+        self.root.attributes("-topmost", self.config.always_on_top)
+        apply_window_style(self.root.winfo_id(), self.config.always_on_top)
+        self._save_config()
+
+    def reanchor(self) -> None:
+        self.config.position = None
+        self._place_window()
+        self._save_config()
+
+    def use_demo(self) -> None:
+        self.config.mode = "demo"
+        self.service.set_provider(DemoProvider())
+        self._save_config()
+        self.refresh_now()
+
+    def show_manual_dialog(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Uso do ChatGPT")
+        dialog.configure(bg=BG)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        current = (
+            self.config.manual_entries[0]
+            if self.config.manual_entries
+            else ManualUsage()
+        )
+        tk.Label(
+            dialog, text="Percentual usado", bg=BG, fg=FG, font=("Segoe UI", 9)
+        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 4))
+        percent_entry = tk.Entry(
+            dialog, width=12, bg="#2B2B2B", fg=FG, insertbackground=FG, relief="flat"
+        )
+        percent_entry.insert(0, f"{current.used_percent:g}")
+        percent_entry.grid(row=0, column=1, sticky="w", padx=(0, 18), pady=(18, 4))
+        tk.Label(
+            dialog, text="Reset (DD/MM/AAAA HH:MM)", bg=BG, fg=FG, font=("Segoe UI", 9)
+        ).grid(row=1, column=0, sticky="w", padx=18, pady=4)
+        reset_entry = tk.Entry(
+            dialog, width=24, bg="#2B2B2B", fg=FG, insertbackground=FG, relief="flat"
+        )
+        if current.reset_at:
+            reset_entry.insert(
+                0, current.reset_at.astimezone().strftime("%d/%m/%Y %H:%M")
+            )
+        reset_entry.grid(row=1, column=1, sticky="w", padx=(0, 18), pady=4)
+        hint = tk.Label(
+            dialog,
+            text="Deixe o reset vazio se a interface não informar uma data.",
+            bg=BG,
+            fg=DIM,
+            font=("Segoe UI", 8),
+            wraplength=290,
+            justify="left",
+        )
+        hint.grid(row=2, column=0, columnspan=2, sticky="w", padx=18, pady=(2, 8))
+        error = tk.Label(
+            dialog,
+            text="",
+            bg=BG,
+            fg=ERROR,
+            font=("Segoe UI", 8),
+            wraplength=290,
+            justify="left",
+        )
+        error.grid(row=3, column=0, columnspan=2, sticky="w", padx=18)
+
+        def save() -> None:
+            try:
+                percent = float(percent_entry.get().replace(",", "."))
+                if not 0 <= percent <= 100:
+                    raise ValueError("O percentual deve estar entre 0 e 100.")
+                reset_at = parse_reset_input(reset_entry.get())
+            except ValueError as exc:
+                error.configure(text=str(exc))
+                return
+            self.config.mode = "manual"
+            self.config.manual_entries = [
+                ManualUsage(used_percent=percent, reset_at=reset_at)
+            ]
+            self.service.set_provider(ManualProvider(tuple(self.config.manual_entries)))
+            self._save_config()
+            dialog.destroy()
+            self.refresh_now()
+
+        buttons = tk.Frame(dialog, bg=BG)
+        buttons.grid(row=4, column=0, columnspan=2, sticky="e", padx=18, pady=(10, 18))
+        tk.Button(
+            buttons,
+            text="Cancelar",
+            command=dialog.destroy,
+            bg="#343434",
+            fg=FG,
+            activebackground="#454545",
+            activeforeground=FG,
+            relief="flat",
+            padx=12,
+        ).pack(side="right", padx=(6, 0))
+        tk.Button(
+            buttons,
+            text="Salvar",
+            command=save,
+            bg=ACCENT,
+            fg="white",
+            activebackground="#0C8B6B",
+            activeforeground="white",
+            relief="flat",
+            padx=14,
+        ).pack(side="right")
+        dialog.bind("<Return>", lambda _event: save())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+        dialog.wait_window()
+
+
+def create_widget(
+    service: UsageService, store: ConfigStore, config: AppConfig
+) -> UsageWidget:
+    """Factory kept separate to make GUI startup easy to test in the future."""
+
+    return UsageWidget(service, store, config)
