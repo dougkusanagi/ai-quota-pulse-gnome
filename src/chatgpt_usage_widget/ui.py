@@ -64,12 +64,11 @@ class UsageCard(tk.Frame):
         parent: tk.Misc,
         item: UsageItem,
         initials: str,
-        menu_command: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             parent,
             bg=CARD_BG,
-            padx=6,
+            padx=5,
             pady=2,
             highlightthickness=1,
             highlightbackground="#343434",
@@ -92,43 +91,29 @@ class UsageCard(tk.Frame):
             fg=FG,
             font=("Segoe UI", 10, "bold"),
         )
-        self._percent.grid(row=0, column=1, sticky="w", padx=(6, 0))
-        self._menu = None
-        if menu_command is not None:
-            self._menu = tk.Button(
-                self,
-                text="☰",
-                command=menu_command,
-                bg=CARD_BG,
-                fg=FG,
-                activebackground="#343434",
-                activeforeground=FG,
-                relief="flat",
-                bd=0,
-                padx=2,
-                pady=0,
-                font=("Segoe UI", 9),
-                cursor="hand2",
-            )
-            self._menu.grid(row=0, column=2, sticky="e")
-        self._bar = tk.Canvas(self, width=142, height=7, bg=CARD_BG, highlightthickness=0)
-        self._bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(2, 1))
+        self._percent.grid(row=0, column=1, sticky="w", padx=(5, 0))
         self._reset = tk.Label(
             self,
             text=self._reset_text(),
             bg=CARD_BG,
             fg=DIM,
             font=("Segoe UI", 7),
-            anchor="w",
+            anchor="e",
         )
-        self._reset.grid(row=2, column=0, columnspan=3, sticky="w")
-        self.columnconfigure(1, weight=1)
+        self._reset.grid(row=0, column=2, sticky="e", padx=(5, 0))
+        self._bar = tk.Canvas(self, width=142, height=7, bg=CARD_BG, highlightthickness=0)
+        self._bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(2, 1))
+        self.columnconfigure(2, weight=1)
         self._bar.bind("<Configure>", lambda _event: self._draw_bar())
         self._draw_bar()
 
     def bind_drag(self, sequence: str, callback: Callable) -> None:
         for widget in (self, self._avatar, self._percent, self._reset):
             widget.bind(sequence, callback)
+
+    def bind_context_menu(self, callback: Callable[[], None]) -> None:
+        for widget in (self, self._avatar, self._percent, self._bar, self._reset):
+            widget.bind("<Button-3>", lambda _event: callback())
 
     def _reset_text(self) -> str:
         return f"↻ {self.item.reset_text()}"
@@ -195,10 +180,12 @@ class UsageWidget:
         self.root.after_idle(self._finish_setup)
 
     def _build_shell(self) -> None:
-        self._shell = tk.Frame(self.root, bg=BG, padx=3, pady=3)
+        self._shell = tk.Frame(self.root, bg=BG)
         self._shell.pack(fill="both", expand=True)
         self._body = tk.Frame(self._shell, bg=BG)
         self._body.pack(fill="both", expand=True)
+        self.root.bind("<Button-3>", lambda _event: self.open_menu())
+        self._shell.bind("<Button-3>", lambda _event: self.open_menu())
         self._body.bind("<Button-3>", lambda _event: self.open_menu())
 
     def _finish_setup(self) -> None:
@@ -250,24 +237,26 @@ class UsageWidget:
                     self._body,
                     item,
                     self.config.account_initials,
-                    self.open_menu if index == min(len(snapshot.items), 3) - 1 else None,
                 )
-                card.pack(side="left", fill="both", expand=True, padx=3)
+                card.pack(side="left", fill="both", expand=True)
                 card.bind_drag("<ButtonPress-1>", self._start_drag)
                 card.bind_drag("<B1-Motion>", self._drag)
                 card.bind_drag("<ButtonRelease-1>", self._finish_drag)
+                card.bind_context_menu(self.open_menu)
                 self._cards.append(card)
+                if index < min(len(snapshot.items), 3) - 1:
+                    tk.Frame(self._body, width=1, bg="#343434").pack(side="left", fill="y", pady=2)
         else:
             card = UsageCard(
                 self._body,
                 UsageItem("chatgpt", "ChatGPT", 0),
                 self.config.account_initials,
-                self.open_menu,
             )
-            card.pack(side="left", fill="both", expand=True, padx=3)
+            card.pack(side="left", fill="both", expand=True)
             card.bind_drag("<ButtonPress-1>", self._start_drag)
             card.bind_drag("<B1-Motion>", self._drag)
             card.bind_drag("<ButtonRelease-1>", self._finish_drag)
+            card.bind_context_menu(self.open_menu)
             self._cards.append(card)
         self.root.update_idletasks()
         self._place_window(resize=True)
@@ -276,7 +265,7 @@ class UsageWidget:
         if resize:
             self.root.update_idletasks()
         width = max(230, self.root.winfo_reqwidth())
-        height = max(54, min(64, self.root.winfo_reqheight()))
+        height = max(38, min(48, self.root.winfo_reqheight()))
         geometry = get_taskbar_geometry()
         if self.config.position and is_window_visible_on_work_area(
             *self.config.position, width, height, geometry
