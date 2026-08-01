@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from .domain import SnapshotStatus, UsageItem, UsageSnapshot
@@ -56,27 +57,34 @@ def parse_reset_input(value: str) -> datetime | None:
 
 
 class UsageCard(tk.Frame):
-    """A single compact usage card."""
+    """A three-line usage card sized to fit inside the Windows taskbar."""
 
-    def __init__(self, parent: tk.Misc, item: UsageItem) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        item: UsageItem,
+        initials: str,
+        menu_command: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(
             parent,
             bg=CARD_BG,
-            padx=10,
-            pady=7,
+            padx=6,
+            pady=2,
             highlightthickness=1,
             highlightbackground="#343434",
         )
         self.item = item
-        self._label = tk.Label(
+        self._avatar = tk.Canvas(
             self,
-            text=item.label,
+            width=22,
+            height=22,
             bg=CARD_BG,
-            fg=FG,
-            font=("Segoe UI", 9, "bold"),
-            anchor="w",
+            highlightthickness=0,
         )
-        self._label.grid(row=0, column=0, sticky="w")
+        self._avatar.grid(row=0, column=0, sticky="w")
+        self._avatar.create_oval(1, 1, 21, 21, fill="#146CFF", outline="")
+        self._avatar.create_text(11, 11, text=initials, fill="white", font=("Segoe UI", 7, "bold"))
         self._percent = tk.Label(
             self,
             text=f"{item.used_percent:.0f}%",
@@ -84,28 +92,49 @@ class UsageCard(tk.Frame):
             fg=FG,
             font=("Segoe UI", 10, "bold"),
         )
-        self._percent.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        self._bar = tk.Canvas(self, width=142, height=10, bg=CARD_BG, highlightthickness=0)
-        self._bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 3))
+        self._percent.grid(row=0, column=1, sticky="w", padx=(6, 0))
+        self._menu = None
+        if menu_command is not None:
+            self._menu = tk.Button(
+                self,
+                text="☰",
+                command=menu_command,
+                bg=CARD_BG,
+                fg=FG,
+                activebackground="#343434",
+                activeforeground=FG,
+                relief="flat",
+                bd=0,
+                padx=2,
+                pady=0,
+                font=("Segoe UI", 9),
+                cursor="hand2",
+            )
+            self._menu.grid(row=0, column=2, sticky="e")
+        self._bar = tk.Canvas(self, width=142, height=7, bg=CARD_BG, highlightthickness=0)
+        self._bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(2, 1))
         self._reset = tk.Label(
             self,
             text=self._reset_text(),
             bg=CARD_BG,
             fg=DIM,
-            font=("Segoe UI", 8),
+            font=("Segoe UI", 7),
             anchor="w",
         )
-        self._reset.grid(row=2, column=0, columnspan=2, sticky="w")
-        self.columnconfigure(0, weight=1)
+        self._reset.grid(row=2, column=0, columnspan=3, sticky="w")
+        self.columnconfigure(1, weight=1)
         self._bar.bind("<Configure>", lambda _event: self._draw_bar())
         self._draw_bar()
 
+    def bind_drag(self, sequence: str, callback: Callable) -> None:
+        for widget in (self, self._avatar, self._percent, self._reset):
+            widget.bind(sequence, callback)
+
     def _reset_text(self) -> str:
-        return f"↻ {self.item.reset_text()} · {self.item.countdown()}"
+        return f"↻ {self.item.reset_text()}"
 
     def update_item(self, item: UsageItem) -> None:
         self.item = item
-        self._label.configure(text=item.label)
         self._percent.configure(text=f"{item.used_percent:.0f}%")
         self._reset.configure(text=self._reset_text())
         self._draw_bar()
@@ -166,70 +195,11 @@ class UsageWidget:
         self.root.after_idle(self._finish_setup)
 
     def _build_shell(self) -> None:
-        self._shell = tk.Frame(self.root, bg=BG, padx=7, pady=6)
+        self._shell = tk.Frame(self.root, bg=BG, padx=3, pady=3)
         self._shell.pack(fill="both", expand=True)
-        self._header = tk.Frame(self._shell, bg=BG)
-        self._header.pack(fill="x")
-        self._title = tk.Label(
-            self._header,
-            text="◉  ChatGPT",
-            bg=BG,
-            fg=FG,
-            font=("Segoe UI", 9, "bold"),
-            cursor="fleur",
-        )
-        self._title.pack(side="left", padx=(2, 8))
-        self._source = tk.Label(
-            self._header, text="", bg=BG, fg=DIM, font=("Segoe UI", 8), cursor="fleur"
-        )
-        self._source.pack(side="left")
-        self._refresh_button = tk.Button(
-            self._header,
-            text="↻",
-            command=self.refresh_now,
-            bg=BG,
-            fg=FG,
-            activebackground="#303030",
-            activeforeground=FG,
-            relief="flat",
-            bd=0,
-            padx=3,
-            pady=0,
-            font=("Segoe UI", 11),
-            cursor="hand2",
-        )
-        self._refresh_button.pack(side="right")
-        self._menu_button = tk.Button(
-            self._header,
-            text="☰",
-            command=self.open_menu,
-            bg=BG,
-            fg=FG,
-            activebackground="#303030",
-            activeforeground=FG,
-            relief="flat",
-            bd=0,
-            padx=3,
-            pady=0,
-            font=("Segoe UI", 10),
-            cursor="hand2",
-        )
-        self._menu_button.pack(side="right")
-        for widget in (self._title, self._source):
-            widget.bind("<ButtonPress-1>", self._start_drag)
-            widget.bind("<B1-Motion>", self._drag)
-            widget.bind("<ButtonRelease-1>", self._finish_drag)
         self._body = tk.Frame(self._shell, bg=BG)
-        self._body.pack(fill="both", expand=True, pady=(4, 0))
-        self._status = tk.Label(
-            self._shell,
-            text="Carregando…",
-            bg=BG,
-            fg=DIM,
-            font=("Segoe UI", 8),
-            anchor="w",
-        )
-        self._status.pack(fill="x", padx=3, pady=(3, 0))
+        self._body.pack(fill="both", expand=True)
+        self._body.bind("<Button-3>", lambda _event: self.open_menu())
 
     def _finish_setup(self) -> None:
         self.root.update_idletasks()
@@ -275,35 +245,30 @@ class UsageWidget:
             child.destroy()
         self._cards.clear()
         if snapshot.items:
-            for item in snapshot.items[:3]:
-                card = UsageCard(self._body, item)
+            for index, item in enumerate(snapshot.items[:3]):
+                card = UsageCard(
+                    self._body,
+                    item,
+                    self.config.account_initials,
+                    self.open_menu if index == min(len(snapshot.items), 3) - 1 else None,
+                )
                 card.pack(side="left", fill="both", expand=True, padx=3)
+                card.bind_drag("<ButtonPress-1>", self._start_drag)
+                card.bind_drag("<B1-Motion>", self._drag)
+                card.bind_drag("<ButtonRelease-1>", self._finish_drag)
                 self._cards.append(card)
         else:
-            empty = tk.Label(
+            card = UsageCard(
                 self._body,
-                text="Configure os dados de uso no menu",
-                bg=CARD_BG,
-                fg=FG,
-                padx=14,
-                pady=10,
-                font=("Segoe UI", 9),
+                UsageItem("chatgpt", "ChatGPT", 0),
+                self.config.account_initials,
+                self.open_menu,
             )
-            empty.pack(fill="both", expand=True, padx=3)
-        source = snapshot.source if snapshot.source else "—"
-        self._source.configure(text=f"· {source}")
-        if snapshot.status is SnapshotStatus.OK:
-            self._status.configure(
-                text=f"Atualizado {snapshot.fetched_at.astimezone().strftime('%H:%M:%S')}",
-                fg=DIM,
-            )
-        elif snapshot.status is SnapshotStatus.LOADING:
-            self._status.configure(text="Carregando…", fg=DIM)
-        else:
-            self._status.configure(
-                text=snapshot.message or "Dados indisponíveis",
-                fg=ERROR if snapshot.status is SnapshotStatus.ERROR else WARNING,
-            )
+            card.pack(side="left", fill="both", expand=True, padx=3)
+            card.bind_drag("<ButtonPress-1>", self._start_drag)
+            card.bind_drag("<B1-Motion>", self._drag)
+            card.bind_drag("<ButtonRelease-1>", self._finish_drag)
+            self._cards.append(card)
         self.root.update_idletasks()
         self._place_window(resize=True)
 
@@ -311,7 +276,7 @@ class UsageWidget:
         if resize:
             self.root.update_idletasks()
         width = max(230, self.root.winfo_reqwidth())
-        height = max(72, self.root.winfo_reqheight())
+        height = max(54, min(64, self.root.winfo_reqheight()))
         geometry = get_taskbar_geometry()
         if self.config.position and is_window_visible_on_work_area(
             *self.config.position, width, height, geometry

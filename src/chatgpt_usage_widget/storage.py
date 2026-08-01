@@ -39,6 +39,7 @@ class AppConfig:
     tray_reserve_px: int = 390
     anchor_gap_px: int = 12
     always_on_top: bool = True
+    account_initials: str = "DL"
     position: tuple[int, int] | None = None
     manual_entries: list[ManualUsage] = field(default_factory=list)
 
@@ -46,6 +47,9 @@ class AppConfig:
         self.refresh_seconds = max(10, min(3600, int(self.refresh_seconds)))
         self.tray_reserve_px = max(180, min(1000, int(self.tray_reserve_px)))
         self.anchor_gap_px = max(0, min(100, int(self.anchor_gap_px)))
+        self.account_initials = (
+            "".join(ch for ch in self.account_initials.upper() if ch.isalnum())[:3] or "??"
+        )
         if self.mode not in {"manual", "demo"}:
             self.mode = "manual"
 
@@ -87,6 +91,7 @@ class ConfigStore:
             "tray_reserve_px": config.tray_reserve_px,
             "anchor_gap_px": config.anchor_gap_px,
             "always_on_top": config.always_on_top,
+            "account_initials": config.account_initials,
             "position": list(config.position) if config.position else None,
             "manual_entries": [
                 {
@@ -124,6 +129,7 @@ class ConfigStore:
             tray_reserve_px=int(raw.get("tray_reserve_px", 390)),
             anchor_gap_px=int(raw.get("anchor_gap_px", 12)),
             always_on_top=bool(raw.get("always_on_top", True)),
+            account_initials=str(raw.get("account_initials", "DL")),
             position=position,
             manual_entries=entries,
         )

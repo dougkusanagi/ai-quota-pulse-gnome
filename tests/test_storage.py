@@ -8,6 +8,7 @@ def test_config_store_round_trips_manual_entry(tmp_path) -> None:
     path = tmp_path / "config.json"
     config = AppConfig(
         refresh_seconds=5,
+        account_initials="dl!",
         position=(100, 200),
         manual_entries=[ManualUsage("main", "ChatGPT", 63, datetime(2026, 8, 1, 14, tzinfo=UTC))],
     )
@@ -17,6 +18,7 @@ def test_config_store_round_trips_manual_entry(tmp_path) -> None:
 
     assert loaded.refresh_seconds == 10
     assert loaded.position == (100, 200)
+    assert loaded.account_initials == "DL"
     assert loaded.manual_entries[0].used_percent == 63
     assert loaded.manual_entries[0].reset_at == datetime(2026, 8, 1, 14, tzinfo=UTC)
 
