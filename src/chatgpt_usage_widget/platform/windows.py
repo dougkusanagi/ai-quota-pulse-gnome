@@ -123,7 +123,18 @@ def apply_window_style(hwnd: int, always_on_top: bool = True) -> None:
     exstyle &= ~0x00040000  # WS_EX_APPWINDOW
     set_window_long(hwnd, -20, exstyle)
     insert_after: Any = -1 if always_on_top else -2  # HWND_TOPMOST / HWND_NOTOPMOST
-    user32.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040)
+    # SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW |
+    # SWP_FRAMECHANGED. Repeating this call is intentional: Explorer can
+    # reassert its own z-order when the taskbar or foreground window changes.
+    user32.SetWindowPos(
+        hwnd,
+        insert_after,
+        0,
+        0,
+        0,
+        0,
+        0x0001 | 0x0002 | 0x0010 | 0x0020 | 0x0040,
+    )
 
 
 def is_window_visible_on_work_area(

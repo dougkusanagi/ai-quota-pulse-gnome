@@ -177,6 +177,9 @@ class UsageWidget:
         self._menu: tk.Menu | None = None
         self._topmost_var = tk.BooleanVar(value=self.config.always_on_top)
         self._build_shell()
+        self.root.bind("<Map>", self._reassert_topmost)
+        self.root.bind("<Visibility>", self._reassert_topmost)
+        self.root.bind("<FocusIn>", self._reassert_topmost)
         self.root.after_idle(self._finish_setup)
 
     def _build_shell(self) -> None:
@@ -191,10 +194,11 @@ class UsageWidget:
     def _finish_setup(self) -> None:
         self.root.update_idletasks()
         self._place_window()
-        apply_window_style(self.root.winfo_id(), self.config.always_on_top)
         self.root.deiconify()
+        self._reassert_topmost()
         self.refresh_now()
         self.root.after(1000, self._tick)
+        self.root.after(400, self._topmost_tick)
         self.root.after(self.config.refresh_seconds * 1000, self._scheduled_refresh)
 
     def run(self) -> None:
@@ -225,6 +229,20 @@ class UsageWidget:
         for card in self._cards:
             card.update_countdown()
         self.root.after(1000, self._tick)
+
+    def _reassert_topmost(self, _event: tk.Event[tk.Misc] | None = None) -> None:
+        if self.config.always_on_top and self.root.winfo_exists():
+            self.root.attributes("-topmost", True)
+            self.root.lift()
+            apply_window_style(self.root.winfo_id(), True)
+
+    def _topmost_tick(self) -> None:
+        if not self.root.winfo_exists():
+            return
+        menu_open = self._menu is not None and self._menu.winfo_exists()
+        if not menu_open:
+            self._reassert_topmost()
+        self.root.after(400, self._topmost_tick)
 
     def _render(self, snapshot: UsageSnapshot) -> None:
         self._snapshot = snapshot
