@@ -19,9 +19,7 @@ def configure_logging(level: int = logging.INFO) -> logging.Logger:
         backupCount=2,
         encoding="utf-8",
     )
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     logger.addHandler(handler)
     logger.propagate = False
     return logger

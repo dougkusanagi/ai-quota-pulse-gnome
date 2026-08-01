@@ -103,9 +103,7 @@ class UsageSnapshot:
     def error(cls, message: str, source: str = "unknown") -> UsageSnapshot:
         return cls(status=SnapshotStatus.ERROR, source=source, message=message)
 
-    def with_status(
-        self, status: SnapshotStatus, message: str | None = None
-    ) -> UsageSnapshot:
+    def with_status(self, status: SnapshotStatus, message: str | None = None) -> UsageSnapshot:
         return UsageSnapshot(
             items=self.items,
             status=status,

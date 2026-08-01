@@ -69,9 +69,7 @@ class ConfigStore:
     def save(self, config: AppConfig) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = self._to_dict(config)
-        fd, temporary = tempfile.mkstemp(
-            prefix="config-", suffix=".tmp", dir=self.path.parent
-        )
+        fd, temporary = tempfile.mkstemp(prefix="config-", suffix=".tmp", dir=self.path.parent)
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
                 json.dump(payload, handle, ensure_ascii=False, indent=2)

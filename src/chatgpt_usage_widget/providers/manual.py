@@ -42,7 +42,5 @@ class ManualProvider:
         try:
             items = tuple(entry.to_item() for entry in self.entries)
         except (TypeError, ValueError) as exc:
-            return UsageSnapshot.error(
-                f"Dados manuais inválidos: {exc}", source=self.name
-            )
+            return UsageSnapshot.error(f"Dados manuais inválidos: {exc}", source=self.name)
         return UsageSnapshot(items=items, source=self.name)

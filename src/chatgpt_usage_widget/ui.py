@@ -85,9 +85,7 @@ class UsageCard(tk.Frame):
             font=("Segoe UI", 10, "bold"),
         )
         self._percent.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        self._bar = tk.Canvas(
-            self, width=142, height=10, bg=CARD_BG, highlightthickness=0
-        )
+        self._bar = tk.Canvas(self, width=142, height=10, bg=CARD_BG, highlightthickness=0)
         self._bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 3))
         self._reset = tk.Label(
             self,
@@ -123,9 +121,7 @@ class UsageCard(tk.Frame):
         self._rounded_rect(0, 0, width, height, radius, BAR_BG)
         fill_width = int(width * self.item.used_percent / 100)
         if fill_width > 0:
-            self._rounded_rect(
-                0, 0, max(fill_width, radius * 2), height, radius, self._color()
-            )
+            self._rounded_rect(0, 0, max(fill_width, radius * 2), height, radius, self._color())
 
     def _color(self) -> str:
         if self.item.used_percent >= 90:
@@ -134,12 +130,8 @@ class UsageCard(tk.Frame):
             return "#E8A83E"
         return self.item.color or ACCENT
 
-    def _rounded_rect(
-        self, x1: int, y1: int, x2: int, y2: int, radius: int, color: str
-    ) -> None:
-        self._bar.create_rectangle(
-            x1 + radius, y1, x2 - radius, y2, fill=color, outline=color
-        )
+    def _rounded_rect(self, x1: int, y1: int, x2: int, y2: int, radius: int, color: str) -> None:
+        self._bar.create_rectangle(x1 + radius, y1, x2 - radius, y2, fill=color, outline=color)
         self._bar.create_oval(x1, y1, x1 + radius * 2, y2, fill=color, outline=color)
         self._bar.create_oval(x2 - radius * 2, y1, x2, y2, fill=color, outline=color)
 
@@ -147,9 +139,7 @@ class UsageCard(tk.Frame):
 class UsageWidget:
     """Own the Tk root, render snapshots and persist user interactions."""
 
-    def __init__(
-        self, service: UsageService, store: ConfigStore, config: AppConfig
-    ) -> None:
+    def __init__(self, service: UsageService, store: ConfigStore, config: AppConfig) -> None:
         self.service = service
         self.store = store
         self.config = config
@@ -171,6 +161,7 @@ class UsageWidget:
             status=SnapshotStatus.LOADING, source="widget"
         )
         self._menu: tk.Menu | None = None
+        self._topmost_var = tk.BooleanVar(value=self.config.always_on_top)
         self._build_shell()
         self.root.after_idle(self._finish_setup)
 
@@ -370,15 +361,13 @@ class UsageWidget:
             bd=0,
         )
         menu.add_command(label="Atualizar agora", command=self.refresh_now)
-        menu.add_command(
-            label="Configurar uso manual…", command=self.show_manual_dialog
-        )
+        menu.add_command(label="Configurar uso manual…", command=self.show_manual_dialog)
         menu.add_command(label="Usar dados de demonstração", command=self.use_demo)
         menu.add_separator()
         menu.add_command(label="Reancorar antes da tray", command=self.reanchor)
         menu.add_checkbutton(
             label="Sempre no topo",
-            variable=tk.BooleanVar(value=self.config.always_on_top),
+            variable=self._topmost_var,
             command=self.toggle_topmost,
         )
         menu.add_separator()
@@ -393,7 +382,7 @@ class UsageWidget:
             menu.grab_release()
 
     def toggle_topmost(self) -> None:
-        self.config.always_on_top = not self.config.always_on_top
+        self.config.always_on_top = bool(self._topmost_var.get())
         self.root.attributes("-topmost", self.config.always_on_top)
         apply_window_style(self.root.winfo_id(), self.config.always_on_top)
         self._save_config()
@@ -415,29 +404,23 @@ class UsageWidget:
         dialog.configure(bg=BG)
         dialog.resizable(False, False)
         dialog.transient(self.root)
-        current = (
-            self.config.manual_entries[0]
-            if self.config.manual_entries
-            else ManualUsage()
+        current = self.config.manual_entries[0] if self.config.manual_entries else ManualUsage()
+        tk.Label(dialog, text="Percentual usado", bg=BG, fg=FG, font=("Segoe UI", 9)).grid(
+            row=0, column=0, sticky="w", padx=18, pady=(18, 4)
         )
-        tk.Label(
-            dialog, text="Percentual usado", bg=BG, fg=FG, font=("Segoe UI", 9)
-        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 4))
         percent_entry = tk.Entry(
             dialog, width=12, bg="#2B2B2B", fg=FG, insertbackground=FG, relief="flat"
         )
         percent_entry.insert(0, f"{current.used_percent:g}")
         percent_entry.grid(row=0, column=1, sticky="w", padx=(0, 18), pady=(18, 4))
-        tk.Label(
-            dialog, text="Reset (DD/MM/AAAA HH:MM)", bg=BG, fg=FG, font=("Segoe UI", 9)
-        ).grid(row=1, column=0, sticky="w", padx=18, pady=4)
+        tk.Label(dialog, text="Reset (DD/MM/AAAA HH:MM)", bg=BG, fg=FG, font=("Segoe UI", 9)).grid(
+            row=1, column=0, sticky="w", padx=18, pady=4
+        )
         reset_entry = tk.Entry(
             dialog, width=24, bg="#2B2B2B", fg=FG, insertbackground=FG, relief="flat"
         )
         if current.reset_at:
-            reset_entry.insert(
-                0, current.reset_at.astimezone().strftime("%d/%m/%Y %H:%M")
-            )
+            reset_entry.insert(0, current.reset_at.astimezone().strftime("%d/%m/%Y %H:%M"))
         reset_entry.grid(row=1, column=1, sticky="w", padx=(0, 18), pady=4)
         hint = tk.Label(
             dialog,
@@ -470,9 +453,7 @@ class UsageWidget:
                 error.configure(text=str(exc))
                 return
             self.config.mode = "manual"
-            self.config.manual_entries = [
-                ManualUsage(used_percent=percent, reset_at=reset_at)
-            ]
+            self.config.manual_entries = [ManualUsage(used_percent=percent, reset_at=reset_at)]
             self.service.set_provider(ManualProvider(tuple(self.config.manual_entries)))
             self._save_config()
             dialog.destroy()
@@ -508,9 +489,7 @@ class UsageWidget:
         dialog.wait_window()
 
 
-def create_widget(
-    service: UsageService, store: ConfigStore, config: AppConfig
-) -> UsageWidget:
+def create_widget(service: UsageService, store: ConfigStore, config: AppConfig) -> UsageWidget:
     """Factory kept separate to make GUI startup easy to test in the future."""
 
     return UsageWidget(service, store, config)

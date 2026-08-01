@@ -31,16 +31,13 @@ class UsageService:
                     SnapshotStatus.STALE,
                     f"Falha ao atualizar; mostrando dados de {self.last_snapshot.source}.",
                 )
-            return UsageSnapshot.error(
-                f"Não foi possível atualizar: {exc}", self.provider.name
-            )
+            return UsageSnapshot.error(f"Não foi possível atualizar: {exc}", self.provider.name)
 
         if snapshot.status is SnapshotStatus.OK:
             self.last_snapshot = snapshot
         elif snapshot.status is SnapshotStatus.ERROR and self.last_snapshot is not None:
             return self.last_snapshot.with_status(
                 SnapshotStatus.STALE,
-                snapshot.message
-                or "Falha ao atualizar; mostrando o último valor válido.",
+                snapshot.message or "Falha ao atualizar; mostrando o último valor válido.",
             )
         return snapshot

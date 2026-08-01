@@ -16,9 +16,7 @@ from .ui import create_widget
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Widget compacto de uso do ChatGPT para Windows."
-    )
+    parser = argparse.ArgumentParser(description="Widget compacto de uso do ChatGPT para Windows.")
     parser.add_argument(
         "--demo",
         action="store_true",
@@ -29,9 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="remove a configuração local antes de iniciar",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
 
@@ -39,9 +35,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     logger = configure_logging()
     if sys.platform != "win32":
-        logger.warning(
-            "The widget is designed for Windows; continuing in compatibility mode."
-        )
+        logger.warning("The widget is designed for Windows; continuing in compatibility mode.")
 
     store = ConfigStore()
     if args.reset_config:
@@ -53,9 +47,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.demo:
         config.mode = "demo"
     provider = (
-        DemoProvider()
-        if config.mode == "demo"
-        else ManualProvider(tuple(config.manual_entries))
+        DemoProvider() if config.mode == "demo" else ManualProvider(tuple(config.manual_entries))
     )
     service = UsageService(provider)
     widget = create_widget(service, store, config)

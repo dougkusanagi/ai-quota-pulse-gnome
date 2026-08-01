@@ -67,12 +67,8 @@ def get_taskbar_geometry() -> TaskbarGeometry | None:
     if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
         return None
     return TaskbarGeometry(
-        work_area=Rect(
-            info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom
-        ),
-        taskbar=Rect(
-            taskbar_rect.left, taskbar_rect.top, taskbar_rect.right, taskbar_rect.bottom
-        ),
+        work_area=Rect(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom),
+        taskbar=Rect(taskbar_rect.left, taskbar_rect.top, taskbar_rect.right, taskbar_rect.bottom),
     )
 
 
@@ -127,9 +123,7 @@ def apply_window_style(hwnd: int, always_on_top: bool = True) -> None:
     exstyle &= ~0x00040000  # WS_EX_APPWINDOW
     set_window_long(hwnd, -20, exstyle)
     insert_after: Any = -1 if always_on_top else -2  # HWND_TOPMOST / HWND_NOTOPMOST
-    user32.SetWindowPos(
-        hwnd, insert_after, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040
-    )
+    user32.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040)
 
 
 def is_window_visible_on_work_area(
@@ -139,9 +133,7 @@ def is_window_visible_on_work_area(
 
     if geometry is None:
         return True
-    visible_width = min(x + width, geometry.work_area.right) - max(
-        x, geometry.work_area.left
-    )
+    visible_width = min(x + width, geometry.work_area.right) - max(x, geometry.work_area.left)
     monitor_top = min(geometry.work_area.top, geometry.taskbar.top)
     monitor_bottom = max(geometry.work_area.bottom, geometry.taskbar.bottom)
     visible_height = min(y + height, monitor_bottom) - max(y, monitor_top)
