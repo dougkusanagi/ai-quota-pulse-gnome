@@ -29,6 +29,7 @@ DIM = "#A6A6A6"
 ACCENT = "#10A37F"
 ERROR = "#E35D6A"
 WARNING = "#E8A83E"
+TOPMOST_REASSERT_MS = 50
 
 
 def parse_reset_input(value: str) -> datetime | None:
@@ -91,7 +92,7 @@ class UsageCard(tk.Frame):
             fg=FG,
             font=("Segoe UI", 10, "bold"),
         )
-        self._percent.grid(row=0, column=1, sticky="w", padx=(5, 0))
+        self._percent.grid(row=0, column=1, sticky="w", padx=(2, 0))
         self._reset = tk.Label(
             self,
             text=self._reset_text(),
@@ -100,7 +101,7 @@ class UsageCard(tk.Frame):
             font=("Segoe UI", 7),
             anchor="e",
         )
-        self._reset.grid(row=0, column=2, sticky="e", padx=(5, 0))
+        self._reset.grid(row=0, column=2, sticky="e", padx=(2, 0))
         self._bar = tk.Canvas(self, width=142, height=7, bg=CARD_BG, highlightthickness=0)
         self._bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(2, 1))
         self.columnconfigure(2, weight=1)
@@ -198,7 +199,7 @@ class UsageWidget:
         self._reassert_topmost()
         self.refresh_now()
         self.root.after(1000, self._tick)
-        self.root.after(400, self._topmost_tick)
+        self.root.after(TOPMOST_REASSERT_MS, self._topmost_tick)
         self.root.after(self.config.refresh_seconds * 1000, self._scheduled_refresh)
 
     def run(self) -> None:
@@ -233,7 +234,6 @@ class UsageWidget:
     def _reassert_topmost(self, _event: tk.Event[tk.Misc] | None = None) -> None:
         if self.config.always_on_top and self.root.winfo_exists():
             self.root.attributes("-topmost", True)
-            self.root.lift()
             apply_window_style(self.root.winfo_id(), True)
 
     def _topmost_tick(self) -> None:
@@ -242,7 +242,7 @@ class UsageWidget:
         menu_open = self._menu is not None and self._menu.winfo_exists()
         if not menu_open:
             self._reassert_topmost()
-        self.root.after(400, self._topmost_tick)
+        self.root.after(TOPMOST_REASSERT_MS, self._topmost_tick)
 
     def _render(self, snapshot: UsageSnapshot) -> None:
         self._snapshot = snapshot
