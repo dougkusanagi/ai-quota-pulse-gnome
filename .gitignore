@@ -13,3 +13,8 @@ build/
 config.json
 widget.log
 crash.log
+
+# GNOME extension build artifacts
+build/
+dist/
+.impeccable/review/

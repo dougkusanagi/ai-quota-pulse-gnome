@@ -1,0 +1,67 @@
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import OpenAIProvider from '../providers/openai.js';
+import ClaudeProvider from '../providers/claude.js';
+export class RefreshService {
+    constructor(accounts, settings, onChange, providers = null) {
+        this.accounts = accounts; this.settings = settings; this.onChange = onChange;
+        this.providers = providers ?? {openai: new OpenAIProvider(), claude: new ClaudeProvider()};
+        this.states = new Map(); this._profiles = new Map(); this._generation = 0; this.busy = false; this._timer = 0;
+        this._signals = [settings.connect('changed::refresh-minutes', () => this.schedule()),
+            settings.connect('changed::accounts', () => { this.cancel(); this.refresh(); })];
+    }
+    start() { this.schedule(); this.refresh(); }
+    schedule() {
+        if (this._timer) GLib.Source.remove(this._timer);
+        this._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, this.settings.get_int('refresh-minutes') * 60, () => {
+            this.refresh(); return GLib.SOURCE_CONTINUE;
+        });
+    }
+    cancel() { this._generation++; this._cancellable?.cancel(); this._cancellable = null; this.busy = false; }
+    async refresh() {
+        if (this._destroyed || this.busy) return;
+        const generation = ++this._generation;
+        this._cancellable = new Gio.Cancellable();
+        const cancellable = this._cancellable;
+        const list = this.accounts.list();
+        const ids = new Set(list.map(a => a.id));
+        for (const id of this.states.keys()) if (!ids.has(id)) { this.states.delete(id); this._profiles.delete(id); }
+        for (const account of list) {
+            const fingerprint = `${account.provider}:${account.profilePath}`;
+            if (this._profiles.get(account.id) !== fingerprint) this.states.delete(account.id);
+            this._profiles.set(account.id, fingerprint);
+        }
+        this.busy = true; this.onChange();
+        let index = 0;
+        const worker = async () => {
+            while (index < list.length && !cancellable.is_cancelled()) {
+                const account = list[index++];
+                const previous = this.states.get(account.id);
+                if (previous?.retryAt > Date.now()) continue;
+                let state;
+                try {
+                    const usage = await this.providers[account.provider].getUsage(account, cancellable);
+                    state = {usage, updated: Date.now() / 1000};
+                } catch (error) {
+                    // Only provider-owned, sanitized messages reach the UI; never log errors.
+                    state = {error: error.message, updated: previous?.updated ?? null,
+                        retryAt: error.retryAfter ? Date.now() + error.retryAfter * 1000 : 0};
+                }
+                if (this._destroyed || generation !== this._generation) return;
+                this.states.set(account.id, state); this.onChange();
+            }
+        };
+        await Promise.all(Array.from({length: Math.min(4, list.length)}, worker));
+        if (this._destroyed || generation !== this._generation) return;
+        this.busy = false; this._cancellable = null; this.onChange();
+    }
+    destroy() {
+        this._destroyed = true; this.cancel();
+        if (this._timer) GLib.Source.remove(this._timer);
+        this._timer = 0;
+        for (const signal of this._signals) this.settings.disconnect(signal);
+        this._signals = [];
+        for (const provider of Object.values(this.providers)) provider.destroy();
+        this.onChange = () => {}; this.states.clear(); this._profiles.clear();
+    }
+}

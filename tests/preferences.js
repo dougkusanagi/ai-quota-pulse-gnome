@@ -1,0 +1,16 @@
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Adw from 'gi://Adw';
+Gio.resources_register(Gio.Resource.load('/usr/share/gnome-shell/org.gnome.Shell.Extensions.src.gresource'));
+Adw.init();
+const {default: Preferences} = await import('../ai-usage@guepardosys/prefs.js');
+const path = `${GLib.get_current_dir()}/build/ai-usage@guepardosys`;
+const source = Gio.SettingsSchemaSource.new_from_directory(`${path}/schemas`, Gio.SettingsSchemaSource.get_default(), false);
+const settings = new Gio.Settings({settings_schema:source.lookup('org.gnome.shell.extensions.aiusage',false)});
+const prefs = new Preferences({uuid:'ai-usage@guepardosys',path,dir:Gio.File.new_for_path(path),'settings-schema':'org.gnome.shell.extensions.aiusage'});
+prefs.getSettings = () => settings;
+const window = new Adw.PreferencesWindow();
+prefs.fillPreferencesWindow(window);
+if (window.default_width !== 540) throw new Error('Preferences were not constructed');
+window.destroy();
+print('GTK4/libadwaita preferences construction: OK');
