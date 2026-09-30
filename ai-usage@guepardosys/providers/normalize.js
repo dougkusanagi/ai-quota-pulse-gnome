@@ -40,23 +40,23 @@ export function normalizeOpenAI(raw) {
     return {windows, primary: primaryWindow(windows), plan: raw.plan_type ?? null};
 }
 export function normalizeClaude(raw) {
+    // Only the session (5h) and weekly windows are real limits. Other top-level
+    // keys (per-model or codenamed buckets) are internal and are not shown.
     const windows = [];
-    for (const [key, value] of Object.entries(raw)) {
-        if (!value || typeof value !== 'object' || Array.isArray(value) || key === 'extra_usage') continue;
-        const main = key === 'five_hour' || key === 'seven_day';
-        const minutes = key === 'five_hour' ? 300 : key.startsWith('seven_day') ? 10080 : null;
-        const label = key === 'five_hour' ? '5 horas' : key === 'seven_day' ? 'Semanal' : key.replaceAll('_', ' ');
-        const w = window(key, label, value, minutes, main ? 'main' : 'scoped');
+    for (const [key, label, minutes] of [['five_hour', '5 horas', 300], ['seven_day', 'Semanal', 10080]]) {
+        const w = window(key, label, raw[key], minutes, 'main');
         if (w) windows.push(w);
     }
     for (const [index, item] of (raw.limits ?? []).entries()) {
-        if (item.is_active === false) continue;
+        if (item.is_active === false || item.scope?.model) continue;
         const isWeekly = item.group === 'weekly' || item.kind?.startsWith('weekly');
-        const scoped = Boolean(item.scope?.model);
-        const w = window(`limit-${index}`, item.scope?.model?.display_name ?? item.kind ?? 'Limite', item,
-            isWeekly ? 10080 : item.kind === 'five_hour' ? 300 : null, scoped ? 'scoped' : 'main');
-        if (w && !windows.some(old => old.minutes === w.minutes && old.kind === 'main' && w.kind === 'main')) windows.push(w);
+        const isSession = item.kind === 'five_hour';
+        if (!isWeekly && !isSession) continue;
+        const minutes = isWeekly ? 10080 : 300;
+        const w = window(`limit-${index}`, isWeekly ? 'Semanal' : '5 horas', item, minutes, 'main');
+        if (w && !windows.some(old => old.minutes === w.minutes)) windows.push(w);
     }
+    windows.sort((a, b) => a.minutes - b.minutes);
     if (!windows.length) throw new Error('O Claude não retornou janelas de uso compatíveis.');
     const extra = raw.extra_usage;
     return {windows, primary: primaryWindow(windows), extra: extra?.is_enabled ? {

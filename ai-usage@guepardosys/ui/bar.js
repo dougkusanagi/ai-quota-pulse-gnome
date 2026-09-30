@@ -3,8 +3,8 @@ import GObject from 'gi://GObject';
 import Cairo from 'cairo';
 export function fillFraction(percent) { return Math.max(0, Math.min(1, (Number.isFinite(percent) ? percent : 0) / 100)); }
 export const UsageBar = GObject.registerClass(class UsageBar extends St.DrawingArea {
-    _init(percent = 0, colored = true, compact = false) {
-        super._init({style_class: compact ? 'ai-bar ai-bar-compact' : 'ai-bar', x_expand: !compact});
+    _init(percent = 0, colored = true, compact = false, props = {}) {
+        super._init({style_class: compact ? 'ai-bar ai-bar-compact' : 'ai-bar', x_expand: !compact, ...props});
         this._percent = percent; this._colored = colored; this._compact = compact;
         this.connect('repaint', () => this._draw());
     }

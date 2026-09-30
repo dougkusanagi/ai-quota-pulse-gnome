@@ -22,18 +22,18 @@ test('Codex selects 5h, retains additional quotas and clamps percentages', () =>
     assert.equal(weekly.primary.label,'Semanal'); assert.equal(weekly.primary.remaining,0);
     assert.throws(()=>normalizeOpenAI({rate_limit:{primary_window:{used_percent:'bad'}}}));
 });
-test('Claude keeps scoped limits, weekly fallback, extra usage and ISO reset', () => {
-    const result = normalizeClaude({five_hour:null,seven_day:{utilization:12,resets_at:'2026-10-01T12:00:00Z'},seven_day_sonnet:{utilization:52},extra_usage:{is_enabled:true,used_credits:50,monthly_limit:200}});
+test('Claude shows only 5h/weekly, weekly fallback, extra usage and ISO reset', () => {
+    const result = normalizeClaude({five_hour:null,seven_day:{utilization:12,resets_at:'2026-10-01T12:00:00Z'},seven_day_sonnet:{utilization:52},seven_day_iguana_necktie:{utilization:3},nimbus_quill:{utilization:9},extra_usage:{is_enabled:true,used_credits:50,monthly_limit:200}});
     assert.equal(result.primary.remaining,88); assert.equal(result.primary.id,'seven_day');
-    assert.equal(result.windows.length,2); assert.equal(result.extra.limit,200);
+    assert.equal(result.windows.length,1); assert.equal(result.extra.limit,200);
     assert.equal(result.primary.reset, Date.parse('2026-10-01T12:00:00Z')/1000);
     assert.equal(primaryWindow([{kind:'scoped',minutes:300},{kind:'main',minutes:10080}]).minutes,10080);
     assert.throws(()=>normalizeClaude({}));
 });
 
-test('new Claude limits array: active session and scoped weekly percent', () => {
-    const result = normalizeClaude({limits:[{kind:'five_hour',percent:14,is_active:true,resets_at:'2026-10-01T12:00:00Z'},{kind:'weekly_scoped',group:'weekly',percent:7,scope:{model:{display_name:'Sonnet'}}},{kind:'weekly',group:'weekly',percent:99,is_active:false}]});
+test('new Claude limits array: active session and weekly, scoped models ignored', () => {
+    const result = normalizeClaude({limits:[{kind:'five_hour',percent:14,is_active:true,resets_at:'2026-10-01T12:00:00Z'},{kind:'weekly_scoped',group:'weekly',percent:7,scope:{model:{display_name:'Sonnet'}}},{kind:'weekly',group:'weekly',percent:40}]});
     assert.equal(result.windows.length,2);
     assert.equal(result.primary.remaining,86);
-    assert.equal(result.windows[1].label,'Sonnet');
+    assert.equal(result.windows[1].label,'Semanal'); assert.equal(result.windows[1].remaining,60);
 });
