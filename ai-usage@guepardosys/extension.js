@@ -132,6 +132,7 @@ export default class AIUsageExtension extends Extension {
         this._detailTab = button('Detalhes', () => this._setTab('details'), null, 'ai-tab selected');
         this._settingsTab = button('Configurações', () => this._setTab('settings'), null, 'ai-tab');
         this._detailTab.toggle_mode = true; this._detailTab.checked = true;
+        this._detailTab.x_expand = this._settingsTab.x_expand = true;
         this._settingsTab.toggle_mode = true;
         tabs.add_child(this._detailTab); tabs.add_child(this._settingsTab); this._root.add_child(tabs);
         this._scroll = new St.ScrollView({style_class: 'ai-scroll', overlay_scrollbars: true, x_expand: true});
@@ -156,9 +157,23 @@ export default class AIUsageExtension extends Extension {
     }
     _render() {
         if (!this._indicator || !this._refresh) return;
-        this._top.destroy_all_children();
         const monitor = Main.layoutManager.findMonitorForActor(this._indicator) ?? Main.layoutManager.primaryMonitor;
-        if (monitor) this._scroll.set_style(`max-height: ${Math.max(120, Math.min(540, monitor.height - 220))}px;`);
+        // Keep header, tabs and footer inside the popup: the list gets whatever the work area leaves.
+        if (monitor) {
+            const area = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
+            this._scroll.set_style(`max-height: ${Math.max(120, Math.min(520, area.height - 250))}px;`);
+        }
+        // Skip rebuilding identical content: destroying actors every tick makes the panel and list flash.
+        const format = this._settings.get_string('reset-format'), colored = this._settings.get_boolean('colored-bars');
+        const signature = JSON.stringify([this._accounts.list(), [...this._refresh.states], format, colored,
+            format === 'relative' ? Math.floor(Date.now() / 60000) : 0]);
+        const changed = signature !== this._signature; this._signature = signature;
+        if (changed) this._buildTop();
+        this._updateChrome();
+        if (this._tab === 'details' && (changed || this._shownSignature !== signature)) this._showDetails();
+    }
+    _buildTop() {
+        this._top.destroy_all_children();
         const visible = this._accounts.list().filter(a => a.visible);
         if (!visible.length) {
             this._top.add_child(new St.Icon({icon_name: 'applications-science-symbolic', icon_size: 18}));
@@ -170,14 +185,16 @@ export default class AIUsageExtension extends Extension {
             group.add_child(identity(account, this.path, true));
             const content = box(true, 'ai-top-meter', {y_align: Clutter.ActorAlign.CENTER});
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
-            content.add_child(label(formatReset(primary?.reset, this._settings.get_string('reset-format')), 'ai-time'));
-            content.add_child(new UsageBar(primary?.remaining ?? 0, this._settings.get_boolean('colored-bars'), true));
+            content.add_child(label(formatReset(primary?.reset, this._settings.get_string('reset-format')), 'ai-time', {x_align: Clutter.ActorAlign.CENTER}));
+            content.add_child(new UsageBar(primary?.remaining ?? 0, this._settings.get_boolean('colored-bars'), true, {x_align: Clutter.ActorAlign.CENTER}));
             group.add_child(content); this._top.add_child(group);
         });
         this._indicator.accessible_name = 'AI Usage. ' + this._accounts.list().map(account => {
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
             return `${account.provider}, ${account.name}, ${account.initials}, ${primary ? `${Math.round(primary.remaining)}% restante, reset ${formatReset(primary.reset, this._settings.get_string('reset-format'))}` : state?.error ?? 'aguardando consulta'}`;
         }).join('. ');
+    }
+    _updateChrome() {
         const states = [...this._refresh.states.values()];
         const last = Math.max(0, ...states.map(s => s.updated ?? 0));
         this._status.text = this._refresh.busy ? 'Atualizando…' : updatedLabel(last);
@@ -191,9 +208,9 @@ export default class AIUsageExtension extends Extension {
         } else if (!this._refresh.busy && this._spin) {
             GLib.Source.remove(this._spin); this._spin = 0; this._refreshIcon.rotation_angle_z = 0;
         }
-        if (this._tab === 'details') this._showDetails();
     }
     _showDetails() {
+        this._shownSignature = this._signature;
         this._body.destroy_all_children();
         const accounts = this._accounts.list();
         if (!accounts.length) {
@@ -221,7 +238,6 @@ export default class AIUsageExtension extends Extension {
                     row.add_child(label(`${Math.round(window.remaining)}% restante`, 'ai-percent')); section.add_child(row);
                     section.add_child(new UsageBar(window.remaining, this._settings.get_boolean('colored-bars')));
                     section.add_child(label(`Reset ${resetDetail(window.reset, this._settings.get_string('reset-format'))}`, 'ai-secondary'));
-                    if (window.id === state.usage.primary.id) section.add_child(label('Limite utilizado na barra superior', 'ai-caption'));
                 }
                 if (state.usage.extra) {
                     const extra = state.usage.extra;
@@ -229,10 +245,11 @@ export default class AIUsageExtension extends Extension {
                     if (extra.limit != null) section.add_child(label(`${extra.used ?? 0} / ${extra.limit} créditos`, 'ai-secondary'));
                 }
             }
-            section.add_child(label(updatedLabel(state?.updated), 'ai-caption')); this._body.add_child(section);
+            this._body.add_child(section);
         }
     }
     _showSettings() {
+        this._shownSignature = null;
         const focus = global.stage.get_key_focus();
         if (focus && this._body.contains(focus)) global.stage.set_key_focus(this._settingsTab);
         this._body.destroy_all_children();
@@ -252,7 +269,7 @@ export default class AIUsageExtension extends Extension {
             row.add_child(identity(account, this.path));
             const names = box(true, 'ai-names', {x_expand: true});
             names.add_child(label(`${account.provider === 'openai' ? 'OpenAI' : 'Claude'} · ${account.initials}`, 'ai-provider'));
-            names.add_child(label(account.name)); names.add_child(label(account.profilePath, 'ai-caption')); row.add_child(names); section.add_child(row);
+            names.add_child(label(account.name, 'ai-setting-name')); names.add_child(label(account.profilePath, 'ai-caption')); row.add_child(names); section.add_child(row);
             const actions = box(false, 'ai-account-actions');
             actions.add_child(button('Editar', () => { this._editor = account; this._showSettings(); }, 'document-edit-symbolic'));
             actions.add_child(button(account.visible ? 'Ocultar' : 'Mostrar', () => this._accounts.put({...account, visible: !account.visible}), account.visible ? 'view-reveal-symbolic' : 'view-conceal-symbolic'));
