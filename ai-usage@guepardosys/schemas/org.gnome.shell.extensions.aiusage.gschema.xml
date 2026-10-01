@@ -1,5 +1,6 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.aiusage" path="/org/gnome/shell/extensions/aiusage/">
+    <key name="theme" type="s"><default>'auto'</default><choices><choice value="auto"/><choice value="light"/><choice value="dark"/></choices><summary>Tema do popup</summary></key>
     <key name="accounts" type="s"><default>'[]'</default><summary>Perfis, sem credenciais</summary></key>
     <key name="reset-format" type="s"><default>'24h'</default><choices><choice value="24h"/><choice value="12h"/><choice value="relative"/></choices></key>
     <key name="colored-bars" type="b"><default>true</default></key>
