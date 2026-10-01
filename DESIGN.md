@@ -1,5 +1,7 @@
-# Native glass utility
-Mode: Operate. The user has pinned both composition and material.
-Top bar: 26px official logo, 17px profile badge, tabular reset above a 42px masked track. Account dividers are quiet.
-Popup: one milk-glass surface, dark ink, soft inner highlights, native background blur on a separate backing actor so text remains sharp. Header and two tabs persist; flat account sections share subtle separators. Focused controls use blue ink and a pale blue wash. Errors name a recovery action; missing data never becomes a fabricated quota.
-GNOME theme font is intentional native typography. Controls remain keyboard accessible; scroll keeps N accounts manageable. Blur API is feature-detected, with translucent white fallback.
+# Native utility, v2
+Mode: Operate. Quiet, solid surfaces: one popup plane, one level of rounded groups, 1px hairlines. No blur or large shadows; motion limited to opacity, translation and rotation.
+Top bar: 20px logo, 12px profile badge with panel-colour ring, tabular reset above a 42x4px track.
+Popup (340px): header (title + live status, refresh, settings) and a scrolling list. Settings and the account editor are pushed screens with a back button; closing the popup returns to details.
+Colour: neutral ink/surface tokens in light and dark; semantic bar tone by remaining quota (green > 40%, amber > 15%, red); accent follows the system accent for primary actions, switch, focus and selection.
+Type: GNOME theme font; 16/13/12/11px scale, tabular figures for every number. Secondary text keeps >= 4.5:1.
+Errors name the cause and recovery action; missing data never becomes a fabricated quota.
