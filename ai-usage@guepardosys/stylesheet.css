@@ -5,58 +5,60 @@
 .ai-time { font-size: 10px; font-weight: 600; font-feature-settings: "tnum"; }
 .ai-top-divider { width: 1px; height: 19px; margin: 5px 1px; background-color: rgba(255,255,255,0.18); }
 .ai-badge { min-width: 17px; height: 17px; border-radius: 9px; padding: 0; }
+.ai-badge-small { min-width: 13px; height: 13px; border-radius: 7px; }
+.ai-badge-small StLabel { font-size: 7px; }
 .ai-badge-text { color: white; font-size: 8px; font-weight: 800; padding: 0; margin: 0; }
 .ai-logo { color: #253344; }
 .ai-logo-panel { color: #fafcff; }
 .ai-claude-logo { color: #C15F3C; }
-.ai-bar { height: 6px; margin: 5px 0; }
+.ai-bar { height: 8px; margin: 3px 0 5px 0; }
 .ai-bar-compact { width: 42px; height: 3px; margin: 0; }
 
-/* Popup surface: the frosted backdrop lives on .ai-glass (blurred separately). */
+/* Popup surface: the menu content draws its own solid background (no separate backdrop actor). */
 .ai-menu { -arrow-background-color: transparent; -arrow-border-color: transparent; -arrow-border-width: 0; -arrow-rise: 6px; }
-.ai-menu .popup-menu-content { background-color: transparent; border: none; box-shadow: none; padding: 0; }
+.ai-menu .popup-menu-content { background-color: #f3f6fa; border: 1px solid #d3dbe5; border-radius: 14px; box-shadow: 0 6px 20px rgba(10,20,36,0.25); padding: 0; }
 .ai-menu .popup-menu-item { padding: 0; background-color: transparent; }
-.ai-glass { background-color: rgba(247,250,255,0.66); border-radius: 22px; border: 1px solid rgba(255,255,255,0.55);
-    box-shadow: 0 14px 40px rgba(10,20,36,0.28), inset 0 1px 0 rgba(255,255,255,0.65); }
-.ai-root { width: 360px; padding: 16px; color: #1c2b3d; spacing: 12px; }
+.ai-root { width: 340px; padding: 14px; color: #1c2b3d; spacing: 10px; }
 
 /* Header and tabs */
 .ai-header { spacing: 10px; padding: 0 2px; }
 .ai-title { font-size: 18px; font-weight: 750; }
-.ai-tabs { spacing: 4px; background-color: rgba(60,84,114,0.12); padding: 3px; border-radius: 12px; }
+.ai-tabs { spacing: 2px; background-color: #e4e9f0; padding: 2px; border-radius: 9px; }
 .ai-tab { padding: 6px 0; border-radius: 9px; color: #44566b; font-size: 12px; text-align: center; transition-duration: 140ms; }
-.ai-tab:hover { background-color: rgba(255,255,255,0.35); }
-.ai-tab.selected { background-color: rgba(255,255,255,0.92); color: #15283f; box-shadow: 0 1px 4px rgba(29,49,77,0.14); font-weight: 700; }
+.ai-tab:hover { background-color: #eef2f7; }
+.ai-tab.selected { background-color: #ffffff; color: #15283f; font-weight: 700; }
 
 /* Account cards */
-.ai-scroll { max-height: 520px; -st-vfade-offset: 16px; }
+.ai-scroll { max-height: 520px; -st-vfade-offset: 0; }
 .ai-scroll StScrollBar { padding: 2px; }
 .ai-scroll StScrollBar StBin { background-color: transparent; }
 .ai-scroll StScrollBar StButton { background-color: rgba(40,60,90,0.30); border-radius: 3px; border: none; min-width: 4px; margin: 0 2px; transition-duration: 140ms; }
 .ai-scroll StScrollBar StButton:hover, .ai-scroll StScrollBar StButton:active { background-color: rgba(40,60,90,0.55); }
-.ai-body { spacing: 10px; padding: 0; }
-.ai-account-section { padding: 14px; spacing: 6px; border-radius: 16px; background-color: rgba(255,255,255,0.42); border: 1px solid rgba(255,255,255,0.55); }
+.ai-body { spacing: 10px; padding: 0 2px 0 0; }
+.ai-account-section { padding: 14px; spacing: 6px; border-radius: 10px; background-color: #ffffff; border: 1px solid #e1e7ef; }
 .ai-account-heading { spacing: 10px; padding-bottom: 2px; }
 .ai-names { spacing: 2px; }
 .ai-provider { font-weight: 700; font-size: 13px; }
 .ai-secondary { font-size: 11px; color: #485c73; }
 .ai-caption { font-size: 10px; color: #51667d; }
-.ai-limit-heading { padding-top: 6px; spacing: 8px; }
+.ai-limit-heading { padding-top: 6px; spacing: 6px; }
 .ai-limit-name { font-size: 12px; font-weight: 600; }
+.ai-dot { font-size: 12px; color: #51667d; padding: 0 1px; }
+.ai-reset { font-size: 11px; color: #485c73; font-feature-settings: "tnum"; }
 .ai-percent { font-size: 12px; font-weight: 650; font-feature-settings: "tnum"; }
 
 /* Footer */
 .ai-footer { padding: 10px 2px 0 2px; spacing: 8px; border-top: 1px solid rgba(45,67,91,0.14); }
 
 /* Controls */
-.ai-button, .ai-icon-button { padding: 6px 10px; border-radius: 9px; background-color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.6);
+.ai-button, .ai-icon-button { padding: 6px 10px; border-radius: 9px; background-color: #e1e7ef; border: 1px solid #d3dbe5;
     color: #263f59; font-size: 11px; transition-duration: 140ms; }
 .ai-icon-button { padding: 6px 8px; }
 .ai-button-content { spacing: 6px; }
-.ai-button:hover, .ai-icon-button:hover, .ai-option:hover { background-color: rgba(255,255,255,0.92); }
-.ai-button:active, .ai-icon-button:active { background-color: rgba(255,255,255,0.75); }
+.ai-button:hover, .ai-icon-button:hover, .ai-option:hover { background-color: #ffffff; }
+.ai-button:active, .ai-icon-button:active { background-color: #d9e0ea; }
 .ai-button:focus, .ai-icon-button:focus, .ai-tab:focus, .ai-option:focus, .ai-swatch:focus { box-shadow: inset 0 0 0 2px #287ac3; }
-.ai-button:insensitive { color: #758598; background-color: rgba(255,255,255,0.22); }
+.ai-button:insensitive { color: #758598; background-color: #eef1f5; }
 .ai-primary { background-color: #256aab; border-color: #256aab; color: white; }
 .ai-primary:hover { background-color: #19568f; }
 .ai-danger, .ai-error { color: #9d2525; }
@@ -69,17 +71,17 @@
 .ai-option { padding: 7px 10px; color: #263f59; border-radius: 8px; font-size: 12px; background-color: transparent; border: none; transition-duration: 120ms; }
 .ai-option.selected { background-color: rgba(35,113,187,0.14); }
 .ai-toggle { font-weight: 700; }
-.ai-account-edit { padding: 12px 14px; spacing: 10px; border-radius: 16px; background-color: rgba(255,255,255,0.42); border: 1px solid rgba(255,255,255,0.55); }
+.ai-account-edit { padding: 12px 14px; spacing: 10px; border-radius: 10px; background-color: #ffffff; border: 1px solid #e1e7ef; }
 .ai-account-actions { spacing: 5px; }
 .ai-form { spacing: 7px; padding: 0 2px; }
 .ai-field-label { font-size: 11px; color: #41566e; padding-top: 4px; }
-.ai-entry { padding: 8px 11px; border-radius: 9px; background-color: rgba(255,255,255,0.66); color: #203043; border: 1px solid rgba(73,101,133,0.16);
+.ai-entry { padding: 8px 11px; border-radius: 9px; background-color: #ffffff; color: #203043; border: 1px solid rgba(73,101,133,0.16);
     selection-background-color: #287ac3; selected-color: white; caret-color: #203043; transition-duration: 140ms; }
-.ai-entry:focus { border-color: #287ac3; background-color: rgba(255,255,255,0.88); }
+.ai-entry:focus { border-color: #287ac3; background-color: #ffffff; }
 .ai-palette { spacing: 10px; padding: 4px 0; }
 .ai-swatch { width: 24px; height: 24px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.8); }
 .ai-form-actions { spacing: 8px; padding-top: 8px; }
 .ai-empty-title { font-size: 15px; font-weight: 650; padding-top: 22px; }
 .ai-menu .ai-setting-row.popup-menu-item { color: #1c2b3d; padding: 8px 2px; transition-duration: 140ms; }
-.ai-menu .ai-setting-row.popup-menu-item:hover { background-color: rgba(255,255,255,0.35); border-radius: 8px; }
+.ai-menu .ai-setting-row.popup-menu-item:hover { background-color: #e9eef5; border-radius: 8px; }
 .ai-setting-name { font-size: 12px; }

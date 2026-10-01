@@ -11,17 +11,19 @@ export function button(text, action, icon = null, style = 'ai-button') {
     b.set_child(content); b.connect('clicked', action); return b;
 }
 export function identity(account, path, panel = false) {
-    const overlay = new St.Widget({layout_manager: new Clutter.FixedLayout(), width: 32, height: 29,
+    const [size, boxW, boxH, bx, by] = panel ? [20, 25, 23, 11, 9] : [26, 32, 29, 14, 12];
+    const overlay = new St.Widget({layout_manager: new Clutter.FixedLayout(), width: boxW, height: boxH,
         y_align: Clutter.ActorAlign.CENTER});
     const icon = new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(`${path}/icons/${account.provider}-symbolic.svg`)),
-        icon_size: 26, x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START,
+        icon_size: size, x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START,
         style_class: account.provider === 'openai' ? (panel ? 'ai-logo-panel' : 'ai-logo') : 'ai-claude-logo'});
     overlay.add_child(icon);
     // A Bin centers the initials on both axes; label text-align only centers horizontally.
     const badge = new St.Bin({style_class: 'ai-badge', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
     badge.set_child(new St.Label({text: account.initials, style_class: 'ai-badge-text', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
     icon.set_position(0, 0);
-    badge.set_position(14, 12);
+    badge.set_position(bx, by);
+    if (panel) badge.add_style_class_name('ai-badge-small');
     badge.set_style(`background-color: ${account.color};`); overlay.add_child(badge); return overlay;
 }
 export function choice(title, options, selected, changed) {

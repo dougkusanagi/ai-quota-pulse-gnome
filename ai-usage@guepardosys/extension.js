@@ -26,7 +26,7 @@ export default class AIUsageExtension extends Extension {
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         this._root = box(true, 'ai-root', {x_expand: true}); item.add_child(this._root);
         this._indicator.menu.addMenuItem(item);
-        this._setupGlass(); this._buildShell();
+        this._buildShell();
         this._setupScreenshotShortcut();
         this._refresh = new RefreshService(this._accounts, this._settings, () => this._render());
         this._signals = [this._settings.connect('changed', (_s, key) => {
@@ -42,18 +42,7 @@ export default class AIUsageExtension extends Extension {
         this._printKeycodes = [];
         this._printBindings = new Map();
         this._captureMenuDetached = false;
-        try {
-            const keymap = Gio.Subprocess.new(['xmodmap', '-pke'], Gio.SubprocessFlags.STDOUT_PIPE);
-            const [ok, output] = keymap.communicate_utf8(null, null);
-            if (ok && keymap.get_successful()) {
-                for (const line of output.split('\n')) {
-                    const match = line.match(/^keycode\s+(\d+)\s*=\s*Print(?:\s|$)/);
-                    if (match) this._printKeycodes.push(Number(match[1]));
-                }
-            }
-        } catch (error) {
-            console.error(`AI Usage: cannot resolve Print keycodes: ${error.message}`);
-        }
+        this._resolvePrintKeycodes();
         const menu = this._indicator.menu;
         this._printMenuSignal = menu.connect('open-state-changed', (_menu, open) => {
             if (open) {
@@ -83,50 +72,51 @@ export default class AIUsageExtension extends Extension {
             this._restorePrintBindings();
         });
     }
+    _resolvePrintKeycodes() {
+        // Never wait synchronously for an X11 client inside the compositor:
+        // Xwayland may need the Shell main loop to finish starting at login.
+        const cancellable = new Gio.Cancellable();
+        this._keymapCancellable = cancellable;
+        try {
+            const process = Gio.Subprocess.new(['xmodmap', '-pke'],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+            let timeout = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
+                timeout = 0;
+                cancellable.cancel();
+                return GLib.SOURCE_REMOVE;
+            });
+            const cancelSignal = cancellable.connect(() => process.force_exit());
+            process.communicate_utf8_async(null, cancellable, (source, result) => {
+                if (timeout) GLib.Source.remove(timeout);
+                cancellable.disconnect(cancelSignal);
+                try {
+                    const [ok, output] = source.communicate_utf8_finish(result);
+                    if (cancellable.is_cancelled() || this._keymapCancellable !== cancellable) return;
+                    if (ok && source.get_successful()) {
+                        for (const line of output.split('\n')) {
+                            const match = line.match(/^keycode\s+(\d+)\s*=\s*Print(?:\s|$)/);
+                            if (match) this._printKeycodes.push(Number(match[1]));
+                        }
+                    }
+                } catch (error) {
+                    if (!cancellable.is_cancelled())
+                        console.error(`AI Usage: cannot resolve Print keycodes: ${error.message}`);
+                } finally {
+                    if (this._keymapCancellable === cancellable) this._keymapCancellable = null;
+                }
+            });
+        } catch (error) {
+            this._keymapCancellable = null;
+            console.error(`AI Usage: cannot resolve Print keycodes: ${error.message}`);
+        }
+    }
     _restorePrintBindings() {
         for (const {name, modes} of this._printBindings?.values() ?? [])
             Main.wm.allowKeybinding(name, modes);
         this._printBindings?.clear();
     }
-    _setupGlass() {
-        // Backdrop alone is blurred. Text, entries and tracks remain crisp.
-        const backing = new St.Widget({style_class: 'ai-glass', reactive: false});
-        this._glass = backing;
-        const menuActor = this._indicator.menu.actor;
-        Main.uiGroup.add_child(backing);
-        Main.uiGroup.set_child_below_sibling(backing, menuActor);
-        backing.hide();
-        this._glassBindings = [
-            menuActor.bind_property('visible', backing, 'visible', 2),
-            menuActor.bind_property('opacity', backing, 'opacity', 2),
-        ];
-        let blur = null;
-        try {
-            blur = new Shell.BlurEffect({mode: Shell.BlurMode.BACKGROUND, brightness: 1});
-            if ('radius' in blur) blur.radius = 28; else if ('sigma' in blur) blur.sigma = 28;
-            blur.enabled = false;
-            backing.add_effect_with_name('ai-background-blur', blur);
-        } catch { /* Translucent white fallback when the compositor lacks blur. */ }
-        const sync = () => {
-            const content = this._indicator.menu.box;
-            const [x, y] = content.get_transformed_position();
-            const [width, height] = content.get_transformed_size();
-            if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
-                if (blur) blur.enabled = false;
-                return;
-            }
-            backing.set_position(x, y); backing.set_size(width, height);
-            if (blur) blur.enabled = menuActor.visible && width > 0 && height > 0;
-        };
-        this._glassSignals = [
-            [menuActor, menuActor.connect('notify::allocation', sync)],
-            [menuActor, menuActor.connect('notify::visible', sync)],
-            [this._indicator.menu.box, this._indicator.menu.box.connect('notify::allocation', sync)],
-        ];
-    }
     _buildShell() {
         const header = box(false, 'ai-header'); header.add_child(label('AI Usage', 'ai-title', {x_expand: true}));
-        header.add_child(button('Configurações', () => this._setTab('settings'), 'emblem-system-symbolic', 'ai-icon-button'));
         this._root.add_child(header);
         const tabs = box(false, 'ai-tabs');
         this._detailTab = button('Detalhes', () => this._setTab('details'), null, 'ai-tab selected');
@@ -135,7 +125,7 @@ export default class AIUsageExtension extends Extension {
         this._detailTab.x_expand = this._settingsTab.x_expand = true;
         this._settingsTab.toggle_mode = true;
         tabs.add_child(this._detailTab); tabs.add_child(this._settingsTab); this._root.add_child(tabs);
-        this._scroll = new St.ScrollView({style_class: 'ai-scroll', overlay_scrollbars: true, x_expand: true});
+        this._scroll = new St.ScrollView({style_class: 'ai-scroll', overlay_scrollbars: false, x_expand: true});
         this._body = box(true, 'ai-body', {x_expand: true});
         // add_child replaced set_child in newer St; feature detection keeps 46–50 on one code path.
         if (typeof this._scroll.set_child === 'function') this._scroll.set_child(this._body); else if (typeof this._scroll.add_child === 'function') this._scroll.add_child(this._body);
@@ -161,7 +151,8 @@ export default class AIUsageExtension extends Extension {
         // Keep header, tabs and footer inside the popup: the list gets whatever the work area leaves.
         if (monitor) {
             const area = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
-            this._scroll.set_style(`max-height: ${Math.max(120, Math.min(520, area.height - 250))}px;`);
+            const style = `max-height: ${Math.max(120, Math.min(520, area.height - 250))}px;`;
+            if (style !== this._scrollStyle) { this._scrollStyle = style; this._scroll.set_style(style); }
         }
         // Skip rebuilding identical content: destroying actors every tick makes the panel and list flash.
         const format = this._settings.get_string('reset-format'), colored = this._settings.get_boolean('colored-bars');
@@ -211,6 +202,7 @@ export default class AIUsageExtension extends Extension {
     }
     _showDetails() {
         this._shownSignature = this._signature;
+        const scrollValue = this._scroll.vadjustment?.value ?? 0;
         this._body.destroy_all_children();
         const accounts = this._accounts.list();
         if (!accounts.length) {
@@ -234,10 +226,11 @@ export default class AIUsageExtension extends Extension {
             } else {
                 for (const window of state.usage.windows) {
                     const row = box(false, 'ai-limit-heading');
-                    row.add_child(label(window.label, 'ai-limit-name', {x_expand: true}));
-                    row.add_child(label(`${Math.round(window.remaining)}% restante`, 'ai-percent')); section.add_child(row);
+                    row.add_child(label(window.label, 'ai-limit-name'));
+                    row.add_child(label('·', 'ai-dot'));
+                    row.add_child(label(resetDetail(window.reset, this._settings.get_string('reset-format')), 'ai-reset', {x_expand: true}));
+                    row.add_child(label(`Resta ${Math.round(window.remaining)}%`, 'ai-percent')); section.add_child(row);
                     section.add_child(new UsageBar(window.remaining, this._settings.get_boolean('colored-bars')));
-                    section.add_child(label(`Reset ${resetDetail(window.reset, this._settings.get_string('reset-format'))}`, 'ai-secondary'));
                 }
                 if (state.usage.extra) {
                     const extra = state.usage.extra;
@@ -247,6 +240,11 @@ export default class AIUsageExtension extends Extension {
             }
             this._body.add_child(section);
         }
+        // Keep the scroll position across rebuilds so refreshes don't jump the list.
+        if (scrollValue > 0) GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            if (this._scroll?.vadjustment) this._scroll.vadjustment.value = scrollValue;
+            return GLib.SOURCE_REMOVE;
+        });
     }
     _showSettings() {
         this._shownSignature = null;
@@ -328,6 +326,8 @@ export default class AIUsageExtension extends Extension {
         }, null, 'ai-button ai-primary')); form.add_child(actions); this._body.add_child(form);
     }
     disable() {
+        this._keymapCancellable?.cancel();
+        this._keymapCancellable = null;
         if (this._printSignal) global.display.disconnect(this._printSignal);
         if (this._printMenuSignal) this._indicator.menu.disconnect(this._printMenuSignal);
         this._printMenuSignal = 0;
@@ -338,11 +338,6 @@ export default class AIUsageExtension extends Extension {
         this._minute = 0; this._spin = 0;
         for (const signal of this._signals ?? []) this._settings.disconnect(signal);
         this._signals = [];
-        for (const [actor, signal] of this._glassSignals ?? []) actor.disconnect(signal);
-        this._glassSignals = [];
-        for (const binding of this._glassBindings ?? []) binding.unbind();
-        this._glassBindings = [];
-        this._glass?.destroy(); this._glass = null;
         this._indicator?.destroy(); this._indicator = null;
         this._settings = null; this._accounts = null; this._editor = null;
         this._body = null; this._root = null; this._top = null;
