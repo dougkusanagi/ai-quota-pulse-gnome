@@ -1,6 +1,6 @@
 # AI Usage para GNOME Shell
 
-Extensão nativa em GJS para acompanhar **limites reais de assinatura** de N contas Codex/OpenAI e Claude. Indicadores lado a lado com logos locais, badges de perfil, horário do reset e trilho de uso. Popup claro de vidro leitoso com blur nativo, detalhes de todas as janelas e configurações internas.
+Extensão nativa em GJS para acompanhar **limites reais de assinatura** de N contas Codex/OpenAI e Claude. Indicadores lado a lado com logos locais, badges de perfil, horário do reset e trilho de uso. Popup claro/escuro sem efeitos de blur (superfícies sólidas e filetes, seguro para o compositor), detalhes de todas as janelas e ajustes internos que seguem a cor de destaque do sistema. Veja a [revisão de interface](docs/UI-REVIEW.md).
 
 ## Instalação
 
@@ -17,7 +17,7 @@ Na primeira instalação em **Wayland**, encerre a sessão e entre novamente par
 make enable
 ```
 
-Em Xorg, também é possível recarregar o Shell com Alt+F2 → `r`. Clique no indicador **AI** na barra superior e escolha **Configurações → Adicionar conta**. Nenhuma conta fictícia é incluída.
+Em Xorg, também é possível recarregar o Shell com Alt+F2 → `r`. Clique no indicador **AI** na barra superior e abra **Ajustes** (engrenagem) → **Adicionar conta**. Nenhuma conta fictícia é incluída.
 
 ## Perfis e autenticação
 
@@ -41,11 +41,11 @@ As [descobertas e fontes](docs/RESEARCH.md) explicam os endpoints internos, que 
 
 ## Uso
 
-**Detalhes** mostra nome/provider, iniciais, percentual restante, reset com data, última consulta bem-sucedida e todas as janelas disponíveis. A janela de aproximadamente 5h tem prioridade na top bar; na ausência dela, a semanal principal é usada. O limite escolhido está identificado.
+**Detalhes** mostra, por conta, nome, provider e plano, percentual restante, reset com dia/hora na mesma linha de cada janela e todas as janelas disponíveis; o subtítulo informa a última consulta bem-sucedida. A janela de aproximadamente 5h tem prioridade na top bar; na ausência dela, a semanal principal é usada..
 
-**Configurações** contém formato 24h/12h/relativo, barra colorida, intervalo de 1–60 minutos e gerenciamento das contas. Adicione, edite nome/diretório/provider/cor/iniciais, oculte da barra, remova ou reordene pelas setas. As setas substituem drag-and-drop e funcionam com teclado. As iniciais são automáticas até a primeira edição manual.
+**Ajustes** (engrenagem) contém tema Auto/Claro/Escuro (padrão Auto, acompanha o GNOME em tempo real), formato do reset 24h/12h/relativo, barras coloridas, intervalo de 1–60 minutos e as contas. Cada conta pode ser reordenada pelas setas (acessível por teclado, sem drag-and-drop), ocultada da barra ou editada; o editor tem pré-visualização ao vivo, paleta, hex, iniciais automáticas até a primeira edição manual e **Remover** com confirmação. Fechar o popup sempre volta para Detalhes.
 
-O gradiente mantém sua largura original; o preenchimento é recortado da direita para a esquerda. Assim, o verde desaparece primeiro. No modo monocromático, o recorte é igual. O refresh único usa ícone nativo animado durante a consulta. Falhas são independentes; uma conta com erro mostra `--`, sem mascarar o erro com uma quota antiga.
+A barra é desenhada da direita para a esquerda e muda de cor conforme o que resta: verde acima de 40%, âmbar até 15% e vermelho abaixo disso. Com barras coloridas desligadas, o preenchimento é monocromático. Falhas são independentes; uma conta com erro mostra `--` e a causa, sem mascarar o erro com uma quota antiga.
 
 ## Desenvolvimento
 
@@ -75,8 +75,8 @@ Veja [validação e compatibilidade](docs/VALIDATION.md). As capturas de teste u
 - `services/accounts.js`: validação e ordem em GSettings; UUID estável por conta.
 - `services/credentials.js`: leitura assíncrona de credenciais existentes e libsecret opcional.
 - `services/refresh.js`: até quatro contas em paralelo, Retry-After, geração de consultas e cancelamento.
-- `ui/`: componentes St e desenho Cairo com recorte fixo.
-- `extension.js`: PanelMenu, popup, formulário e lifecycle.
+- `ui/`: componentes St (segmented, switch, grupos, identidade) e barra Cairo em pílula.
+- `extension.js`: PanelMenu, telas (detalhes, ajustes, editor) e lifecycle.
 - `prefs.js`: preferências GTK4/libadwaita para acesso pelo gerenciador de extensões.
 
 Todos os timers, sinais, bindings, efeitos e requests são removidos ao desabilitar. Não são iniciados subprocessos pela extensão. Trocar o provider/diretório de uma conta invalida imediatamente a quota daquele perfil.

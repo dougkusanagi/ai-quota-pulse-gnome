@@ -6,6 +6,10 @@ export default class AIUsagePreferences extends ExtensionPreferences {
         const settings = this.getSettings();
         const page = new Adw.PreferencesPage({title: 'AI Usage', icon_name: 'applications-science-symbolic'});
         const group = new Adw.PreferencesGroup({title: 'Aparência', description: 'As contas são gerenciadas diretamente na aba Configurações do indicador na barra superior.'});
+        const themes = ['auto', 'light', 'dark'];
+        const theme = new Adw.ComboRow({title: 'Tema do popup', model: Gtk.StringList.new(['Automático', 'Claro', 'Escuro']),
+            selected: Math.max(0, themes.indexOf(settings.get_string('theme')))});
+        theme.connect('notify::selected', () => settings.set_string('theme', themes[theme.selected])); group.add(theme);
         const formats = ['24h', '12h', 'relative'];
         const format = new Adw.ComboRow({title: 'Formato do reset', model: Gtk.StringList.new(['24 horas', '12 horas', 'Relativo']),
             selected: Math.max(0, formats.indexOf(settings.get_string('reset-format')))});
