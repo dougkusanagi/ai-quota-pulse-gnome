@@ -13,7 +13,7 @@ import {RefreshService} from './services/refresh.js';
 import {formatReset, resetShort, updatedLabel} from './utils/time.js';
 import {initialsFor, cleanInitials} from './utils/initials.js';
 import {UsageBar} from './ui/bar.js';
-import {box, label, wrapped, glyph, button, iconButton, identity, segmented, toggle, settingRow, group} from './ui/widgets.js';
+import {box, label, wrapped, glyph, button, iconButton, identity, segmented, toggle, settingRow, group, resetIcon} from './ui/widgets.js';
 
 export default class AIUsageExtension extends Extension {
     enable() {
@@ -274,10 +274,10 @@ export default class AIUsageExtension extends Extension {
                     const limit = box(true, 'ai-limit'), head = box(false, 'ai-limit-head');
                     head.add_child(label(window.label, 'ai-limit-name'));
                     head.add_child(label('·', 'ai-caption ai-dot'));
+                    head.add_child(resetIcon());
                     head.add_child(label(resetShort(window.reset, format), 'ai-caption', {x_expand: true}));
                     const percent = Math.round(window.remaining);
-                    head.add_child(label('Resta', 'ai-caption ai-remaining'));
-                    head.add_child(label(`${percent}%`, percent <= 15 ? 'ai-percent ai-percent-low' : 'ai-percent'));
+                    head.add_child(label(`${percent}% restante`, percent <= 15 ? 'ai-percent ai-percent-low' : 'ai-percent'));
                     limit.add_child(head);
                     limit.add_child(this._bar(window.remaining, `${window.label}: ${percent}% restante`));
                     card.add_child(limit);

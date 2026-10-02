@@ -28,14 +28,14 @@ export function resetDetail(timestamp, format = '24h', now = Date.now()) {
     if (!timestamp || !Number.isFinite(timestamp)) return 'Reset não informado';
     if (timestamp * 1000 <= now) return 'Reiniciando agora';
     if (format === 'relative') return `Reseta em ${relativeReset(timestamp, now)}`;
-    return `Reseta em ${relativeReset(timestamp, now)} · ${dayWord(new Date(timestamp * 1000), now)} ${formatReset(timestamp, format)}`;
+    return `Reseta em ${relativeReset(timestamp, now)} · ${dayWord(new Date(timestamp * 1000), now)} - ${formatReset(timestamp, format)}`;
 }
 // One-line form for the limit heading: "hoje 21:28", "dom 04/10 22:26" or, in relative mode, "em 3h12".
 export function resetShort(timestamp, format = '24h', now = Date.now()) {
     if (!timestamp || !Number.isFinite(timestamp)) return 'reset não informado';
     if (timestamp * 1000 <= now) return 'reiniciando';
     if (format === 'relative') return `em ${relativeReset(timestamp, now)}`;
-    return `${dayWord(new Date(timestamp * 1000), now)} ${formatReset(timestamp, format)}`;
+    return `${dayWord(new Date(timestamp * 1000), now)} - ${formatReset(timestamp, format)}`;
 }
 export function updatedLabel(timestamp, now = Date.now()) {
     if (!timestamp) return 'Ainda não atualizado';

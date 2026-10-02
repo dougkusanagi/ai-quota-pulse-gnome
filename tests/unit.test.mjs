@@ -41,9 +41,9 @@ test('new Claude limits array: active session and weekly, scoped models ignored'
 test('reset detail combines a countdown with a day-aware clock time', () => {
     const now = new Date(2026, 8, 30, 12, 0).getTime();
     const at = (d, h, m) => new Date(2026, 8, d, h, m).getTime() / 1000;
-    assert.equal(resetDetail(at(30, 15, 12), '24h', now), 'Reseta em 3h12 · hoje 15:12');
-    assert.equal(resetDetail(at(30, 12, 42), '24h', now), 'Reseta em 42 min · hoje 12:42');
-    assert.equal(resetDetail(new Date(2026, 9, 1, 9, 0).getTime() / 1000, '12h', now), 'Reseta em 21h00 · amanhã 9:00 AM');
+    assert.equal(resetDetail(at(30, 15, 12), '24h', now), 'Reseta em 3h12 · hoje - 15:12');
+    assert.equal(resetDetail(at(30, 12, 42), '24h', now), 'Reseta em 42 min · hoje - 12:42');
+    assert.equal(resetDetail(new Date(2026, 9, 1, 9, 0).getTime() / 1000, '12h', now), 'Reseta em 21h00 · amanhã - 9:00 AM');
     assert.equal(resetDetail(new Date(2026, 9, 3, 9, 0).getTime() / 1000, 'relative', now), 'Reseta em 2d 21h');
     assert.equal(resetDetail(at(30, 11, 0), '24h', now), 'Reiniciando agora');
     assert.equal(resetDetail(null, '24h', now), 'Reset não informado');
@@ -58,6 +58,6 @@ test('updated label is relative and degrades to a date', () => {
 });
 test('short reset fits a heading', () => {
     const now = new Date(2026, 8, 30, 12, 0).getTime();
-    assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, '24h', now), 'hoje 15:12');
+    assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, '24h', now), 'hoje - 15:12');
     assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, 'relative', now), 'em 3h12');
 });
