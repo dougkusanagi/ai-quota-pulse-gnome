@@ -16,7 +16,7 @@ export function resetDetail(timestamp, format) {
     const d = new Date(timestamp * 1000);
     const weekday = d.toLocaleDateString('pt-BR', {weekday: 'short'}).replace('.', '');
     const date = d.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'});
-    return `${weekday} ${date} ${formatReset(timestamp, format)}`;
+    return `${weekday} ${date} - ${formatReset(timestamp, format)}`;
 }
 export function updatedLabel(timestamp) {
     if (!timestamp) return 'Ainda não atualizado';

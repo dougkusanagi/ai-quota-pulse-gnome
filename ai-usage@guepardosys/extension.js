@@ -13,7 +13,7 @@ import {RefreshService} from './services/refresh.js';
 import {formatReset, resetDetail, updatedLabel} from './utils/time.js';
 import {initialsFor, cleanInitials} from './utils/initials.js';
 import {UsageBar} from './ui/bar.js';
-import {box, label, button, identity, choice} from './ui/widgets.js';
+import {box, label, button, identity, choice, resetIcon} from './ui/widgets.js';
 
 export default class AIUsageExtension extends Extension {
     enable() {
@@ -228,8 +228,9 @@ export default class AIUsageExtension extends Extension {
                     const row = box(false, 'ai-limit-heading');
                     row.add_child(label(window.label, 'ai-limit-name'));
                     row.add_child(label('·', 'ai-dot'));
+                    row.add_child(resetIcon());
                     row.add_child(label(resetDetail(window.reset, this._settings.get_string('reset-format')), 'ai-reset', {x_expand: true}));
-                    row.add_child(label(`Resta ${Math.round(window.remaining)}%`, 'ai-percent')); section.add_child(row);
+                    row.add_child(label(`${Math.round(window.remaining)}% restante`, 'ai-percent')); section.add_child(row);
                     section.add_child(new UsageBar(window.remaining, this._settings.get_boolean('colored-bars')));
                 }
                 if (state.usage.extra) {
