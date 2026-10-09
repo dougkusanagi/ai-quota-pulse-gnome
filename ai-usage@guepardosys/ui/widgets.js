@@ -62,14 +62,13 @@ export function toggle(title, active, changed) {
     const knob = new St.Widget({style_class: 'ai-switch-knob', y_align: Clutter.ActorAlign.CENTER, x_align: Clutter.ActorAlign.START});
     const sw = new St.Button({style_class: 'ai-switch', can_focus: true, toggle_mode: true, checked: active,
         accessible_name: title, y_align: Clutter.ActorAlign.CENTER, child: knob});
-    const sync = animate => {
+    // Alignment instead of an eased translation: the knob can never be left mid-flight on the wrong side.
+    const sync = () => {
         if (sw.checked) sw.add_style_class_name('on'); else sw.remove_style_class_name('on');
-        const x = sw.checked ? 16 : 0;
-        if (animate) knob.ease({translation_x: x, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        else knob.translation_x = x;
+        knob.x_align = sw.checked ? Clutter.ActorAlign.END : Clutter.ActorAlign.START;
     };
-    sync(false);
-    sw.connect('clicked', () => { sync(true); changed(sw.checked); });
+    sync();
+    sw.connect('clicked', () => { sync(); changed(sw.checked); });
     return sw;
 }
 // A titled row of an inset group; groups draw the hairlines between rows.

@@ -31,7 +31,8 @@ export class RefreshService {
             if (this._profiles.get(account.id) !== fingerprint) this.states.delete(account.id);
             this._profiles.set(account.id, fingerprint);
         }
-        this.busy = true; this.onChange();
+        this.busy = true;
+        try { this.onChange(); } catch (error) { console.error(`AI Usage: render failed: ${error.message}\n${error.stack}`); }
         let index = 0;
         const worker = async () => {
             while (index < list.length && !cancellable.is_cancelled()) {
@@ -44,16 +45,25 @@ export class RefreshService {
                     state = {usage, updated: Date.now() / 1000};
                 } catch (error) {
                     // Only provider-owned, sanitized messages reach the UI; never log errors.
-                    state = {error: error.message, updated: previous?.updated ?? null,
-                        retryAt: error.retryAfter ? Date.now() + error.retryAfter * 1000 : 0};
+                    const rateLimitFailures = error.rateLimited ? (previous?.rateLimitFailures ?? 0) + 1 : 0;
+                    // Repeated 429s need a longer pause even when Retry-After is absent.
+                    const backoff = rateLimitFailures ? Math.min(3600, 300 * 2 ** Math.min(rateLimitFailures - 1, 4)) : 0;
+                    const retryAfter = Math.max(error.retryAfter ?? 0, backoff);
+                    state = {usage: previous?.usage, error: error.message, updated: previous?.updated ?? null,
+                        rateLimitFailures, retryAt: retryAfter ? Date.now() + retryAfter * 1000 : 0};
                 }
                 if (this._destroyed || generation !== this._generation) return;
-                this.states.set(account.id, state); this.onChange();
+                this.states.set(account.id, state);
+                try { this.onChange(); } catch { /* keep refreshing the remaining accounts */ }
             }
         };
-        await Promise.all(Array.from({length: Math.min(4, list.length)}, worker));
-        if (this._destroyed || generation !== this._generation) return;
-        this.busy = false; this._cancellable = null; this.onChange();
+        try { await Promise.all(Array.from({length: Math.min(4, list.length)}, worker)); }
+        finally {
+            if (!this._destroyed && generation === this._generation) {
+                this.busy = false; this._cancellable = null;
+                try { this.onChange(); } catch { /* keep the service usable */ }
+            }
+        }
     }
     destroy() {
         this._destroyed = true; this.cancel();

@@ -201,13 +201,13 @@ export default class AIUsageExtension extends Extension {
             group.add_child(identity(account, this.path, {panel: true}));
             const content = box(true, 'ai-top-meter', {y_align: Clutter.ActorAlign.CENTER});
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
-            content.add_child(label(formatReset(primary?.reset, format), 'ai-time', {x_align: Clutter.ActorAlign.CENTER}));
+            content.add_child(label(`${state?.error && primary ? '! ' : ''}${formatReset(primary?.reset, format)}`, 'ai-time', {x_align: Clutter.ActorAlign.CENTER}));
             content.add_child(new UsageBar(primary?.remaining ?? 0, {colored, compact: true}, {x_align: Clutter.ActorAlign.CENTER}));
             group.add_child(content); this._top.add_child(group);
         });
         this._indicator.accessible_name = 'AI Usage. ' + this._accounts.list().map(account => {
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
-            return `${account.provider}, ${account.name}, ${account.initials}, ${primary ? `${Math.round(primary.remaining)}% restante, reset ${formatReset(primary.reset, format)}` : state?.error ?? 'aguardando consulta'}`;
+            return `${account.provider}, ${account.name}, ${account.initials}, ${primary ? `${state.error ? 'dados desatualizados, ' : ''}${Math.round(primary.remaining)}% restante, reset ${formatReset(primary.reset, format)}` : state?.error ?? 'aguardando consulta'}`;
         }).join('. ');
     }
     _updateChrome() {
@@ -257,14 +257,18 @@ export default class AIUsageExtension extends Extension {
             names.add_child(label(account.name, 'ai-account-name', {x_align: Clutter.ActorAlign.START}));
             names.add_child(label(`${account.provider === 'openai' ? 'Codex' : 'Claude'}${plan}`, 'ai-caption', {x_align: Clutter.ActorAlign.START}));
             heading.add_child(names); card.add_child(heading);
+            if (state?.error) {
+                const callout = box(false, 'ai-callout');
+                callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
+                const text = box(true, 'ai-callout-text', {x_expand: true});
+                text.add_child(label(state.usage ? 'Dados desatualizados' : 'Não foi possível atualizar', 'ai-callout-title', {x_align: Clutter.ActorAlign.START}));
+                text.add_child(wrapped(state.error, 'ai-caption'));
+                if (state.usage) text.add_child(wrapped(`Última consulta: ${updatedLabel(state.updated).replace(/^Atualizado/, 'atualizado')}.`, 'ai-caption'));
+                if (state.retryAt) text.add_child(wrapped(`Nova tentativa automática: ${resetShort(state.retryAt / 1000, format)}.`, 'ai-caption'));
+                callout.add_child(text); card.add_child(callout);
+            }
             if (!state?.usage) {
-                if (state?.error) {
-                    const callout = box(false, 'ai-callout');
-                    callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
-                    const text = box(true, 'ai-callout-text', {x_expand: true});
-                    text.add_child(label('Não foi possível atualizar', 'ai-callout-title', {x_align: Clutter.ActorAlign.START}));
-                    text.add_child(wrapped(state.error, 'ai-caption')); callout.add_child(text); card.add_child(callout);
-                } else {
+                if (!state?.error) {
                     const limit = box(true, 'ai-limit');
                     limit.add_child(label('Consultando…', 'ai-caption', {x_align: Clutter.ActorAlign.START}));
                     limit.add_child(this._bar(0, 'Consultando')); card.add_child(limit);
