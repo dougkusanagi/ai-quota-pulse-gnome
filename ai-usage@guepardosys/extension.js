@@ -14,12 +14,12 @@ import {DEFAULT_RESET_PROMPT, waitingForMessage, visibleReset} from './utils/ses
 import {formatReset, resetShort, updatedLabel} from './utils/time.js';
 import {initialsFor, cleanInitials} from './utils/initials.js';
 import {UsageBar} from './ui/bar.js';
-import {box, label, wrapped, glyph, button, iconButton, identity, segmented, toggle, settingRow, group, resetIcon} from './ui/widgets.js';
+import {box, label, wrapped, glyph, button, iconButton, identity, segmented, toggle, settingRow, group, resetIcon, tooltip} from './ui/widgets.js';
 
 export default class AIUsageExtension extends Extension {
     enable() {
         this._settings = this.getSettings(); this._accounts = new Accounts(this._settings);
-        this._view = 'details'; this._editor = null; this._dark = false;
+        this._view = 'details'; this._editor = null; this._dark = false; this._resetHelp = new Set();
         this._indicator = new PanelMenu.Button(0.5, 'AI Usage');
         this._top = box(false, 'ai-top'); this._indicator.add_child(this._top);
         Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
@@ -149,6 +149,10 @@ export default class AIUsageExtension extends Extension {
         this._refreshButton = iconButton('view-refresh-symbolic', 'Atualizar agora', () => this._refresh?.refresh());
         this._refreshIcon = this._refreshButton.get_child();
         this._refreshIcon.set_pivot_point(0.5, 0.5);
+        this._refreshIcon.connect('notify::mapped', () => {
+            if (!this._refreshIcon.mapped) this._stopSpin();
+            else if (this._refresh?.busy && !this._spinning) this._spin();
+        });
         this._settingsButton = iconButton('emblem-system-symbolic', 'Ajustes', () => this._go('settings'));
         for (const child of [this._backButton, names, this._refreshButton, this._settingsButton]) header.add_child(child);
         this._backButton.hide(); this._root.add_child(header);
@@ -224,28 +228,32 @@ export default class AIUsageExtension extends Extension {
         this._refreshButton.reactive = !this._refresh.busy;
         this._refreshButton.can_focus = !this._refresh.busy;
         this._refreshButton.opacity = this._refresh.busy ? 150 : 255;
-        if (this._refresh.busy && !this._spinning) { this._spinning = true; this._spin(); }
-        else if (!this._refresh.busy && this._spinning) {
-            if (this._spinTimer) GLib.Source.remove(this._spinTimer);
-            this._spinTimer = 0;
-            this._spinning = false; this._refreshIcon.remove_all_transitions(); this._refreshIcon.rotation_angle_z = 0;
-        }
+        if (this._refresh.busy && !this._spinning) this._spin();
+        // A completed request does not cut a visible turn short.
+        if (this._spinning && (!this._refreshIcon.mapped || !St.Settings.get().enable_animations)) this._stopSpin();
+    }
+    _stopSpin() {
+        this._spinning = false;
+        if (this._spinTimer) GLib.Source.remove(this._spinTimer);
+        this._spinTimer = 0;
+        this._refreshIcon?.remove_all_transitions();
+        if (this._refreshIcon) this._refreshIcon.rotation_angle_z = 0;
     }
     _spin() {
-        if (!this._spinning || !this._refreshIcon) return;
-        // ease() completes synchronously for unmapped actors or disabled animations.
-        // A completion callback that starts another animation would recurse forever.
-        const animate = () => {
-            if (this._refreshIcon.mapped && St.Settings.get().enable_animations) {
-                this._refreshIcon.rotation_angle_z = 0;
-                this._refreshIcon.ease({rotation_angle_z: 360, duration: 900, mode: Clutter.AnimationMode.LINEAR});
-            }
-        };
-        animate();
-        this._spinTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 900, () => {
-            animate();
-            return GLib.SOURCE_CONTINUE;
-        });
+        if (!this._refreshIcon?.mapped || !St.Settings.get().enable_animations) return;
+        this._spinning = true;
+        this._refreshIcon.rotation_angle_z = 0;
+        this._refreshIcon.ease({rotation_angle_z: 360, duration: 900, mode: Clutter.AnimationMode.LINEAR,
+            onComplete: () => {
+                if (!this._spinning) return;
+                // Defer the next turn: ease() can complete synchronously when unmapped.
+                this._spinTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1, () => {
+                    this._spinTimer = 0;
+                    if (this._refresh?.busy && this._refreshIcon?.mapped && St.Settings.get().enable_animations) this._spin();
+                    else this._stopSpin();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }});
     }
     _bar(percent, name) { return new UsageBar(percent, {colored: this._settings.get_boolean('colored-bars'), dark: this._dark, name}); }
     _showDetails() {
@@ -271,12 +279,34 @@ export default class AIUsageExtension extends Extension {
             names.add_child(label(account.name, 'ai-account-name', {x_align: Clutter.ActorAlign.START}));
             names.add_child(label(`${account.provider === 'openai' ? 'Codex' : 'Claude'}${plan}`, 'ai-caption', {x_align: Clutter.ActorAlign.START}));
             heading.add_child(names);
-            heading.add_child(toggle(`Mensagem após reset · ${account.name}`, account.autoResetMessage,
+            const controls = box(false, 'ai-reset-controls', {y_align: Clutter.ActorAlign.CENTER});
+            const help = box(true, 'ai-reset-help');
+            help.add_child(label('Mensagem após reset de 5h', 'ai-row-title'));
+            help.add_child(wrapped('Quando a janela de 5h estiver disponível, envia uma mensagem curta por esta conta. Isso inicia a próxima janela e usa um pouco do limite. Se já estiver disponível, envia ao ativar.', 'ai-caption'));
+            help.add_child(wrapped('Uma tentativa por janela. A extensão precisa estar ativa e o CLI da conta, autenticado.', 'ai-caption'));
+            help.add_child(button('Editar prompt', () => { this._editor = account; this._go('editor'); }, 'document-edit-symbolic'));
+            help.visible = this._resetHelp.has(account.id);
+            const helpButton = iconButton('mail-send-symbolic', `Ajuda: mensagem após reset · ${account.name}`, () => {
+                help.visible = !help.visible;
+                helpButton.checked = help.visible;
+                if (help.visible) this._resetHelp.add(account.id); else this._resetHelp.delete(account.id);
+            }, 'ai-reset-help-button');
+            helpButton.toggle_mode = true;
+            helpButton.checked = help.visible;
+            tooltip(helpButton, 'Mensagem após reset de 5h · clique para saber mais');
+            controls.add_child(helpButton);
+            controls.add_child(toggle(`Mensagem após reset · ${account.name}`, account.autoResetMessage,
                 active => this._accounts.put({...account, autoResetMessage: active})));
+            heading.add_child(controls);
             card.add_child(heading);
-            if (account.autoResetMessage) card.add_child(wrapped(state?.messageSending ? 'Enviando mensagem curta…' :
-                state?.messageError ?? 'Mensagem automática após reset de 5h · prompt em Editar conta',
-                state?.messageError ? 'ai-error' : 'ai-caption'));
+            card.add_child(help);
+            if (account.autoResetMessage && (state?.messageSending || state?.messageError)) {
+                const status = box(false, 'ai-reset-status');
+                status.add_child(glyph('mail-send-symbolic', 12, state.messageError ? 'ai-error' : 'ai-caption'));
+                status.add_child(wrapped(state.messageSending ? 'Mensagem após reset: enviando…' : `Mensagem após reset: ${state.messageError}`,
+                    state.messageError ? 'ai-error' : 'ai-caption', {x_expand: true}));
+                card.add_child(status);
+            }
             if (state?.error) {
                 const callout = box(false, 'ai-callout');
                 callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
@@ -489,13 +519,12 @@ export default class AIUsageExtension extends Extension {
         this._printSignal = 0;
         this._refresh?.destroy(); this._refresh = null;
         if (this._minute) GLib.Source.remove(this._minute);
-        if (this._spinTimer) GLib.Source.remove(this._spinTimer);
-        this._spinTimer = 0;
-        this._minute = 0; this._spinning = false;
+        this._stopSpin();
+        this._minute = 0;
         for (const signal of this._signals ?? []) this._settings.disconnect(signal);
         this._signals = [];
         this._indicator?.destroy(); this._indicator = null;
-        this._settings = null; this._accounts = null; this._editor = null;
+        this._settings = null; this._accounts = null; this._editor = null; this._resetHelp = null;
         this._body = null; this._root = null; this._top = null;
         this._refreshIcon = null; this._refreshButton = null; this._scroll = null;
     }

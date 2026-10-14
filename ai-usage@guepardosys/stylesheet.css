@@ -56,6 +56,10 @@
 .ai-card { padding: 14px; spacing: 14px; border-radius: 14px; background-color: #ffffff; border: 1px solid rgba(0,0,0,0.07); }
 .ai-account-heading { spacing: 12px; }
 .ai-names { spacing: 1px; }
+.ai-reset-controls { spacing: 4px; }
+.ai-reset-help { spacing: 8px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.07); }
+.ai-reset-status { spacing: 6px; }
+.ai-reset-help-button:checked { background-color: rgba(0,0,0,0.08); color: #1d1d1f; }
 .ai-limit { spacing: 0; }
 .ai-limit-head { spacing: 0; }
 .ai-limit-extra { padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.07); }
@@ -134,7 +138,8 @@
 .ai-dark .ai-tile { background-color: rgba(255,255,255,0.07); }
 .ai-dark .ai-badge-large { border-color: #2a2b2f; }
 .ai-dark .ai-card, .ai-dark .ai-group { background-color: #2a2b2f; border-color: rgba(255,255,255,0.07); }
-.ai-dark .ai-row, .ai-dark .ai-limit-extra { border-color: rgba(255,255,255,0.08); }
+.ai-dark .ai-reset-help-button:checked { background-color: rgba(255,255,255,0.12); color: #f5f5f7; }
+.ai-dark .ai-row, .ai-dark .ai-limit-extra, .ai-dark .ai-reset-help { border-color: rgba(255,255,255,0.08); }
 .ai-dark .ai-row:first-child { border-top-width: 0; }
 .ai-dark .ai-bar { color: rgba(255,255,255,0.11); }
 .ai-dark .ai-bar.ai-bar-compact { color: rgba(255,255,255,0.22); }
