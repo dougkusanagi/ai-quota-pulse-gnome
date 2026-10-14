@@ -2,7 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 import {Accounts} from '../ai-usage@guepardosys/services/accounts.js';
-import {messageCommand, sendResetMessage} from '../ai-usage@guepardosys/services/reset-message.js';
+import {messageCommand, sendResetMessage, cliSearchPath, findCli, cliFailure} from '../ai-usage@guepardosys/services/reset-message.js';
 import {RefreshService} from '../ai-usage@guepardosys/services/refresh.js';
 import {UsageProvider, UsageError} from '../ai-usage@guepardosys/providers/base.js';
 import {codexCredentials, claudeCredentials} from '../ai-usage@guepardosys/services/credentials.js';
@@ -75,6 +75,17 @@ async function main() {
             GLib.file_set_contents(`${cliTmp}/${cli}`, script);
             Gio.File.new_for_path(`${cliTmp}/${cli}`).set_attribute_uint32('unix::mode', 0o700, Gio.FileQueryInfoFlags.NONE, null);
         }
+        const fallback = `${cliTmp}/.bun/bin`;
+        GLib.mkdir_with_parents(fallback, 0o700);
+        GLib.file_set_contents(`${fallback}/codex`, '#!/bin/sh\nexit 0\n');
+        Gio.File.new_for_path(`${fallback}/codex`).set_attribute_uint32('unix::mode', 0o700, Gio.FileQueryInfoFlags.NONE, null);
+        const search = cliSearchPath('/usr/bin', cliTmp);
+        assert(findCli('codex', search) === `${fallback}/codex`, 'find Bun installation outside GNOME PATH');
+        assert(findCli('codex', [cliTmp, ...search]) === `${cliTmp}/codex`, 'PATH installation takes precedence');
+        assert(findCli('not-installed', search) === null, 'missing CLI');
+        Gio.File.new_for_path(`${fallback}/codex`).delete(null);
+        Gio.File.new_for_path(fallback).delete(null);
+        Gio.File.new_for_path(`${cliTmp}/.bun`).delete(null);
         GLib.setenv('PATH', cliTmp, true);
         for (const provider of ['openai', 'claude']) {
             await sendResetMessage({provider, profilePath: cliTmp, resetPrompt: 'literal $(no-shell)'}, new Gio.Cancellable());
@@ -82,6 +93,15 @@ async function main() {
             assert(args.includes('literal $(no-shell)'), 'subprocess preserves prompt without shell evaluation');
             assert(args.includes(provider === 'openai' ? '--ephemeral' : '--no-session-persistence'), 'isolated CLI session');
         }
+        GLib.file_set_contents(`${cliTmp}/claude`, '#!/bin/sh\nprintf "Not logged in: fixture-secret-token"\nexit 1\n');
+        let failure = '';
+        try { await sendResetMessage({provider: 'claude', profilePath: cliTmp, resetPrompt: 'OK'}, new Gio.Cancellable()); }
+        catch (error) { failure = error.message; }
+        assert(failure.includes('Login Claude') && !failure.includes('fixture-secret'), 'stdout failures classified without exposing output');
+        assert(cliFailure('claude', 'unknown option --test', 1).includes('incompatível'), 'unsupported CLI options');
+        assert(cliFailure('openai', 'model requested is not supported', 1).includes('Modelo indisponível'), 'model failure');
+        assert(cliFailure('claude', "You have hit your limit", 1).includes('Limite de uso'), 'subscription limit');
+        assert(cliFailure('openai', 'fixture-secret-token', 7).includes('código 7'), 'exit code without raw diagnostic');
         GLib.file_set_contents(`${cliTmp}/codex`, '#!/bin/sh\nexec /bin/sleep 5\n');
         const cancelled = new Gio.Cancellable();
         const pending = sendResetMessage({provider: 'openai', profilePath: cliTmp, resetPrompt: 'OK'}, cancelled);
