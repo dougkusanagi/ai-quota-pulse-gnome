@@ -112,8 +112,12 @@
 .ai-seg-item:hover { color: #1d1d1f; }
 .ai-seg-item.selected { background-color: #ffffff; color: #1d1d1f; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.16); }
 
-.ai-switch { width: 34px; height: 18px; padding: 2px; border-radius: 11px; background-color: rgba(0,0,0,0.20); transition-duration: 140ms; }
-.ai-switch-knob { width: 18px; height: 18px; border-radius: 9px; background-color: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.30); }
+.ai-switch { width: 30px; height: 16px; padding: 2px; border-radius: 10px; background-color: rgba(0,0,0,0.20); transition-duration: 140ms; }
+.ai-switch-knob { width: 16px; height: 16px; margin-right: 14px; border-radius: 8px; background-color: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.30); }
+
+/* St.Button centers its child; reserve the thumb travel with margins. */
+.ai-switch.on .ai-switch-knob { margin-left: 14px; margin-right: 0; }
+.ai-switch:hover { background-color: rgba(0,0,0,0.28); }
 
 .ai-entry { padding: 6px 9px; border-radius: 8px; background-color: rgba(0,0,0,0.045); color: #1d1d1f; border: 1px solid transparent;
     selected-color: white; caret-color: #1d1d1f; transition-duration: 120ms; }
@@ -155,6 +159,7 @@
 .ai-dark .ai-seg-item { color: #a1a4ab; }
 .ai-dark .ai-seg-item.selected { background-color: #4b4c52; color: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
 .ai-dark .ai-switch { background-color: rgba(255,255,255,0.22); }
+.ai-dark .ai-switch:hover { background-color: rgba(255,255,255,0.30); }
 .ai-dark .ai-entry { background-color: rgba(255,255,255,0.07); color: #f5f5f7; caret-color: #f5f5f7; }
 .ai-dark .ai-scroll StScrollBar StButton { background-color: rgba(255,255,255,0.22); }
 .ai-dark .ai-scroll StScrollBar StButton:hover, .ai-dark .ai-scroll StScrollBar StButton:active { background-color: rgba(255,255,255,0.55); }
