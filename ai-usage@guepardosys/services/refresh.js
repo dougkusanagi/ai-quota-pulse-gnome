@@ -1,9 +1,12 @@
 import Gio from 'gi://Gio';
+import {sendResetMessage} from './reset-message.js';
+import {sessionWindow, shouldSendResetMessage} from '../utils/session.js';
 import GLib from 'gi://GLib';
 import OpenAIProvider from '../providers/openai.js';
 import ClaudeProvider from '../providers/claude.js';
 export class RefreshService {
-    constructor(accounts, settings, onChange, providers = null) {
+    constructor(accounts, settings, onChange, providers = null, sender = sendResetMessage) {
+        this.sender = sender; this._resetTimer = 0;
         this.accounts = accounts; this.settings = settings; this.onChange = onChange;
         this.providers = providers ?? {openai: new OpenAIProvider(), claude: new ClaudeProvider()};
         this.states = new Map(); this._profiles = new Map(); this._generation = 0; this.busy = false; this._timer = 0;
@@ -17,7 +20,7 @@ export class RefreshService {
             this.refresh(); return GLib.SOURCE_CONTINUE;
         });
     }
-    cancel() { this._generation++; this._cancellable?.cancel(); this._cancellable = null; this.busy = false; }
+    cancel() { if (this._resetTimer) GLib.Source.remove(this._resetTimer); this._resetTimer = 0; this._generation++; this._cancellable?.cancel(); this._cancellable = null; this.busy = false; }
     async refresh() {
         if (this._destroyed || this.busy) return;
         const generation = ++this._generation;
@@ -42,7 +45,28 @@ export class RefreshService {
                 let state;
                 try {
                     const usage = await this.providers[account.provider].getUsage(account, cancellable);
-                    state = {usage, updated: Date.now() / 1000};
+                    state = {usage, updated: Date.now() / 1000, messageError: previous?.messageError};
+                    if (this._destroyed || generation !== this._generation) return;
+                    let attempts;
+                    try { attempts = JSON.parse(this.settings.get_string('reset-message-attempts')); } catch { attempts = {}; }
+                    if (!attempts || typeof attempts !== 'object' || Array.isArray(attempts)) attempts = {};
+                    const key = JSON.stringify([account.id, account.provider, account.profilePath]);
+                    if (account.autoResetMessage && shouldSendResetMessage(usage, Number(attempts[key]) || 0)) {
+                        // Claim before sending: cancellation/restart must not duplicate a possibly delivered message.
+                        attempts[key] = Date.now() / 1000;
+                        this.settings.set_string('reset-message-attempts', JSON.stringify(attempts));
+                        this.states.set(account.id, {...state, messageSending: true});
+                        try { this.onChange(); } catch { /* render is independent */ }
+                        try {
+                            await this.sender(account, cancellable);
+                            state.messageError = null;
+                            state.messageSent = Date.now() / 1000;
+                            state.usage = await this.providers[account.provider].getUsage(account, cancellable);
+                            state.updated = Date.now() / 1000;
+                        } catch (error) {
+                            state.messageError = state.messageSent ? 'Mensagem enviada; aguardando atualização dos limites.' : error.message;
+                        }
+                    }
                 } catch (error) {
                     // Only provider-owned, sanitized messages reach the UI; never log errors.
                     const rateLimitFailures = error.rateLimited ? (previous?.rateLimitFailures ?? 0) + 1 : 0;
@@ -61,6 +85,15 @@ export class RefreshService {
         finally {
             if (!this._destroyed && generation === this._generation) {
                 this.busy = false; this._cancellable = null;
+                if (this._resetTimer) GLib.Source.remove(this._resetTimer);
+                this._resetTimer = 0;
+                const now = Date.now() / 1000;
+                const upcoming = [...this.states.values()].filter(s => !s.error)
+                    .map(s => sessionWindow(s.usage)?.reset).filter(t => t > now);
+                if (upcoming.length) this._resetTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT,
+                    Math.max(1, Math.ceil(Math.min(...upcoming) - now) + 1), () => {
+                        this._resetTimer = 0; this.refresh(); return GLib.SOURCE_REMOVE;
+                    });
                 try { this.onChange(); } catch { /* keep the service usable */ }
             }
         }

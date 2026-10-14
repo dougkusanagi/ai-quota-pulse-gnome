@@ -61,3 +61,24 @@ test('short reset fits a heading', () => {
     assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, '24h', now), 'hoje - 15:12');
     assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, 'relative', now), 'em 3h12');
 });
+
+test('session reset stays hidden until usage starts and disappears when elapsed', async () => {
+    const {waitingForMessage, visibleReset, shouldSendResetMessage} = await import('../ai-usage@guepardosys/utils/session.js');
+    const now = 2000000000;
+    const window = {minutes: 300, kind: 'main', remaining: 100, reset: now + 18000};
+    assert.equal(waitingForMessage(window, now), true);
+    assert.equal(visibleReset(window, now), null);
+    window.remaining = 99;
+    assert.equal(visibleReset(window, now), now + 18000);
+    window.reset = now - 1;
+    assert.equal(visibleReset(window, now), null);
+    const usage = {windows: [window]};
+    assert.equal(shouldSendResetMessage(usage, 0, now), true);
+    assert.equal(shouldSendResetMessage(usage, now - 60, now), false);
+    assert.equal(shouldSendResetMessage(usage, now - 18000, now), true);
+    window.reset = now + 300;
+    assert.equal(shouldSendResetMessage(usage, 0, now), false);
+    assert.equal(waitingForMessage({...window, minutes: 10080, remaining: 100}, now), false);
+    assert.equal(shouldSendResetMessage({windows: [{...window, reset: null}]}, 0, now), false);
+    assert.equal(shouldSendResetMessage({windows: [{...window, kind: 'scoped'}]}, 0, now), false);
+});

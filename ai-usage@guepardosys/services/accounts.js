@@ -1,4 +1,5 @@
 import GLib from 'gi://GLib';
+import {DEFAULT_RESET_PROMPT} from '../utils/session.js';
 import {initialsFor, cleanInitials} from '../utils/initials.js';
 import {expandPath} from './credentials.js';
 export function validateAccount(value) {
@@ -8,10 +9,12 @@ export function validateAccount(value) {
     const profilePath = String(value.profilePath ?? '').trim();
     expandPath(profilePath);
     if (!/^#[0-9a-f]{6}$/i.test(value.color)) throw new Error('Use uma cor hexadecimal, por exemplo #0A84FF.');
+    const resetPrompt = String(value.resetPrompt ?? DEFAULT_RESET_PROMPT).trim();
+    if (!resetPrompt || resetPrompt.length > 2000) throw new Error('Use um prompt de 1 a 2000 caracteres.');
     const initials = cleanInitials(value.initials || initialsFor(name));
     if (!initials || !/^[\p{L}\p{N}]{1,3}$/u.test(initials)) throw new Error('Use de 1 a 3 letras ou números nas iniciais.');
     return {id: value.id || GLib.uuid_string_random(), provider: value.provider, name, profilePath,
-        initials, color: value.color, visible: value.visible !== false};
+        initials, color: value.color, visible: value.visible !== false, autoResetMessage: value.autoResetMessage === true, resetPrompt};
 }
 export class Accounts {
     constructor(settings) { this.settings = settings; }
