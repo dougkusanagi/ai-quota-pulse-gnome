@@ -10,6 +10,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {Accounts} from './services/accounts.js';
 import {RefreshService} from './services/refresh.js';
+import {DEFAULT_RESET_PROMPT, waitingForMessage, visibleReset} from './utils/session.js';
 import {formatReset, resetShort, updatedLabel} from './utils/time.js';
 import {initialsFor, cleanInitials} from './utils/initials.js';
 import {UsageBar} from './ui/bar.js';
@@ -201,13 +202,13 @@ export default class AIUsageExtension extends Extension {
             group.add_child(identity(account, this.path, {panel: true}));
             const content = box(true, 'ai-top-meter', {y_align: Clutter.ActorAlign.CENTER});
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
-            content.add_child(label(formatReset(primary?.reset, format), 'ai-time', {x_align: Clutter.ActorAlign.CENTER}));
+            content.add_child(label(`${state?.error && primary ? '! ' : ''}${formatReset(visibleReset(primary), format)}`, 'ai-time', {x_align: Clutter.ActorAlign.CENTER}));
             content.add_child(new UsageBar(primary?.remaining ?? 0, {colored, compact: true}, {x_align: Clutter.ActorAlign.CENTER}));
             group.add_child(content); this._top.add_child(group);
         });
         this._indicator.accessible_name = 'AI Usage. ' + this._accounts.list().map(account => {
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
-            return `${account.provider}, ${account.name}, ${account.initials}, ${primary ? `${Math.round(primary.remaining)}% restante, reset ${formatReset(primary.reset, format)}` : state?.error ?? 'aguardando consulta'}`;
+            return `${account.provider}, ${account.name}, ${account.initials}, ${primary ? `${state.error ? 'dados desatualizados, ' : ''}${Math.round(primary.remaining)}% restante, reset ${formatReset(visibleReset(primary), format)}` : state?.error ?? 'aguardando consulta'}`;
         }).join('. ');
     }
     _updateChrome() {
@@ -269,15 +270,25 @@ export default class AIUsageExtension extends Extension {
             const plan = state?.usage?.plan ? ` · ${String(state.usage.plan).replace(/^./, c => c.toUpperCase())}` : '';
             names.add_child(label(account.name, 'ai-account-name', {x_align: Clutter.ActorAlign.START}));
             names.add_child(label(`${account.provider === 'openai' ? 'Codex' : 'Claude'}${plan}`, 'ai-caption', {x_align: Clutter.ActorAlign.START}));
-            heading.add_child(names); card.add_child(heading);
+            heading.add_child(names);
+            heading.add_child(toggle(`Mensagem após reset · ${account.name}`, account.autoResetMessage,
+                active => this._accounts.put({...account, autoResetMessage: active})));
+            card.add_child(heading);
+            if (account.autoResetMessage) card.add_child(wrapped(state?.messageSending ? 'Enviando mensagem curta…' :
+                state?.messageError ?? 'Mensagem automática após reset de 5h · prompt em Editar conta',
+                state?.messageError ? 'ai-error' : 'ai-caption'));
+            if (state?.error) {
+                const callout = box(false, 'ai-callout');
+                callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
+                const text = box(true, 'ai-callout-text', {x_expand: true});
+                text.add_child(label(state.usage ? 'Dados desatualizados' : 'Não foi possível atualizar', 'ai-callout-title', {x_align: Clutter.ActorAlign.START}));
+                text.add_child(wrapped(state.error, 'ai-caption'));
+                if (state.usage) text.add_child(wrapped(`Última consulta: ${updatedLabel(state.updated).replace(/^Atualizado/, 'atualizado')}.`, 'ai-caption'));
+                if (state.retryAt) text.add_child(wrapped(`Nova tentativa automática: ${resetShort(state.retryAt / 1000, format)}.`, 'ai-caption'));
+                callout.add_child(text); card.add_child(callout);
+            }
             if (!state?.usage) {
-                if (state?.error) {
-                    const callout = box(false, 'ai-callout');
-                    callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
-                    const text = box(true, 'ai-callout-text', {x_expand: true});
-                    text.add_child(label('Não foi possível atualizar', 'ai-callout-title', {x_align: Clutter.ActorAlign.START}));
-                    text.add_child(wrapped(state.error, 'ai-caption')); callout.add_child(text); card.add_child(callout);
-                } else {
+                if (!state?.error) {
                     const limit = box(true, 'ai-limit');
                     limit.add_child(label('Consultando…', 'ai-caption', {x_align: Clutter.ActorAlign.START}));
                     limit.add_child(this._bar(0, 'Consultando')); card.add_child(limit);
@@ -287,8 +298,8 @@ export default class AIUsageExtension extends Extension {
                     const limit = box(true, 'ai-limit'), head = box(false, 'ai-limit-head');
                     head.add_child(label(window.label, 'ai-limit-name'));
                     head.add_child(label('·', 'ai-caption ai-dot'));
-                    head.add_child(resetIcon());
-                    head.add_child(label(resetShort(window.reset, format), 'ai-caption', {x_expand: true}));
+                    if (!waitingForMessage(window)) head.add_child(resetIcon());
+                    head.add_child(label(waitingForMessage(window) ? 'aguardando mensagem' : resetShort(window.reset, format), 'ai-caption', {x_expand: true}));
                     const percent = Math.round(window.remaining);
                     head.add_child(label(`${percent}% restante`, percent <= 15 ? 'ai-percent ai-percent-low' : 'ai-percent'));
                     limit.add_child(head);
@@ -425,6 +436,12 @@ export default class AIUsageExtension extends Extension {
         const paletteRow = box(false, 'ai-row'); paletteRow.add_child(label('Cor', 'ai-row-title ai-field-title')); paletteRow.add_child(palette);
         body.add_child(group(providerRow, name.row, path.row, initials.row));
         body.add_child(group(paletteRow, color.row));
+        let autoResetMessage = account.autoResetMessage === true;
+        const prompt = field('Prompt', account.resetPrompt ?? DEFAULT_RESET_PROMPT, 'Prompt da mensagem após reset');
+        prompt.entry.clutter_text.max_length = 2000;
+        body.add_child(group(settingRow('Mensagem após reset', toggle('Mensagem após reset de 5h', autoResetMessage,
+            active => { autoResetMessage = active; }), 'Inicia a próxima janela de 5h'), prompt.row));
+        body.add_child(wrapped('Envia pelo CLI desta conta quando a janela de 5h estiver disponível. Resposta curta; uma tentativa por janela. Se já estiver disponível, envia ao ativar.', 'ai-caption'));
         let manual = Boolean(account.id), automatic = false;
         initials.entry.clutter_text.connect('text-changed', () => { if (!automatic) manual = true; sync(); });
         name.entry.clutter_text.connect('text-changed', () => {
@@ -436,7 +453,7 @@ export default class AIUsageExtension extends Extension {
         const save = () => {
             try {
                 this._accounts.put({...account, provider, name: name.entry.text, profilePath: path.entry.text,
-                    initials: cleanInitials(initials.entry.text), color: color.entry.text.trim()});
+                    initials: cleanInitials(initials.entry.text), color: color.entry.text.trim(), autoResetMessage, resetPrompt: prompt.entry.text});
                 this._go('settings');
             } catch (e) { error.text = e.message; error.show(); }
         };

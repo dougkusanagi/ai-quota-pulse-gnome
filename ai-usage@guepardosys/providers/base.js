@@ -1,7 +1,9 @@
 import Soup from 'gi://Soup?version=3.0';
 import GLib from 'gi://GLib';
 export class UsageError extends Error {
-    constructor(message, retryAfter = 0) { super(message); this.retryAfter = retryAfter; }
+    constructor(message, retryAfter = 0, rateLimited = false) {
+        super(message); this.retryAfter = retryAfter; this.rateLimited = rateLimited;
+    }
 }
 export class UsageProvider {
     constructor() { this.session = new Soup.Session({timeout: 30, user_agent: 'AIUsage-GNOME/1.0'}); }
@@ -27,7 +29,8 @@ export class UsageProvider {
         if (status === 429) {
             const header = message.response_headers.get_one('Retry-After');
             const seconds = /^\d+$/.test(header ?? '') ? Number(header) : (Date.parse(header) - Date.now()) / 1000;
-            throw new UsageError('Provider limitou as consultas. Aguarde antes de atualizar.', Math.min(86400, Math.max(300, seconds || 300)));
+            const retryAfter = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 0;
+            throw new UsageError('O provedor limitou as consultas.', retryAfter, true);
         }
         if (status !== 200) throw new UsageError(`Consulta indisponível (HTTP ${status}). Tente novamente mais tarde.`);
         try { return JSON.parse(new TextDecoder().decode(bytes.get_data())); }

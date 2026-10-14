@@ -17,7 +17,13 @@ Na primeira instalação em **Wayland**, encerre a sessão e entre novamente par
 make enable
 ```
 
-Em Xorg, também é possível recarregar o Shell com Alt+F2 → `r`. Clique no indicador **AI** na barra superior e abra **Ajustes** (engrenagem) → **Adicionar conta**. Nenhuma conta fictícia é incluída.
+Em Xorg, também é possível recarregar o Shell com Alt+F2 → `r`. Clique no indicador **AI** na barra superior e abra Uma janela de 5h sem uso ou já vencida mostra **aguardando mensagem**, sem horário na barra superior. O próximo reset aparece após o provedor confirmar o início da janela por uma mensagem; não é calculado localmente.
+
+O switch pequeno no cabeçalho de cada conta ativa **Mensagem após reset** (desligado por padrão). A extensão envia pelo CLI autenticado do perfil assim que uma consulta confirmar a janela de 5h disponível, inclusive ao ativar numa janela já disponível. Em **Editar conta**, o prompt padrão `Responda apenas: OK.` pode ser alterado (até 2000 caracteres). Uma consulta é agendada no horário do reset conhecido; durante suspensão ou com a extensão desligada, o envio aguarda a próxima consulta ao voltar.
+
+A mensagem inicia a próxima janela e consome um pouco da assinatura. O CLI `codex` ou `claude` deve estar instalado no PATH da sessão GNOME. Cada envio usa sessão nova, diretório temporário e o perfil cadastrado; saída e credenciais não são registradas. Uma tentativa por janela fica salva em GSettings para impedir duplicações, inclusive após reiniciar. Se o CLI falhar, a conta mostra a causa e aguarda a próxima janela para tentar novamente. A tentativa tem limite de 2 minutos e é cancelada ao desabilitar a extensão ou alterar contas.
+
+**Ajustes** (engrenagem) → **Adicionar conta**. Nenhuma conta fictícia é incluída.
 
 ## Perfis e autenticação
 
@@ -43,9 +49,15 @@ As [descobertas e fontes](docs/RESEARCH.md) explicam os endpoints internos, que 
 
 **Detalhes** mostra, por conta, nome, provider e plano, percentual restante, reset com dia/hora na mesma linha de cada janela e todas as janelas disponíveis; o subtítulo informa a última consulta bem-sucedida. A janela de aproximadamente 5h tem prioridade na top bar; na ausência dela, a semanal principal é usada..
 
+Uma janela de 5h sem uso ou já vencida mostra **aguardando mensagem**, sem horário na barra superior. O próximo reset aparece após o provedor confirmar o início da janela por uma mensagem; não é calculado localmente.
+
+O switch pequeno no cabeçalho de cada conta ativa **Mensagem após reset** (desligado por padrão). A extensão envia pelo CLI autenticado do perfil assim que uma consulta confirmar a janela de 5h disponível, inclusive ao ativar numa janela já disponível. Em **Editar conta**, o prompt padrão `Responda apenas: OK.` pode ser alterado (até 2000 caracteres). Uma consulta é agendada no horário do reset conhecido; durante suspensão ou com a extensão desligada, o envio aguarda a próxima consulta ao voltar.
+
+A mensagem inicia a próxima janela e consome um pouco da assinatura. O CLI `codex` ou `claude` deve estar instalado no PATH da sessão GNOME. Cada envio usa sessão nova, diretório temporário e o perfil cadastrado; saída e credenciais não são registradas. Uma tentativa por janela fica salva em GSettings para impedir duplicações, inclusive após reiniciar. Se o CLI falhar, a conta mostra a causa e aguarda a próxima janela para tentar novamente. A tentativa tem limite de 2 minutos e é cancelada ao desabilitar a extensão ou alterar contas.
+
 **Ajustes** (engrenagem) contém tema Auto/Claro/Escuro (padrão Auto, acompanha o GNOME em tempo real), formato do reset 24h/12h/relativo, barras coloridas, intervalo de 1–60 minutos e as contas. Cada conta pode ser reordenada pelas setas (acessível por teclado, sem drag-and-drop), ocultada da barra ou editada; o editor tem pré-visualização ao vivo, paleta, hex, iniciais automáticas até a primeira edição manual e **Remover** com confirmação. Fechar o popup sempre volta para Detalhes.
 
-A barra é desenhada da direita para a esquerda e muda de cor conforme o que resta: verde acima de 40%, âmbar até 15% e vermelho abaixo disso. Com barras coloridas desligadas, o preenchimento é monocromático. Falhas são independentes; uma conta com erro mostra `--` e a causa, sem mascarar o erro com uma quota antiga.
+A barra é desenhada da direita para a esquerda e muda de cor conforme o que resta: verde acima de 40%, âmbar até 15% e vermelho abaixo disso. Com barras coloridas desligadas, o preenchimento é monocromático. Falhas são independentes. Se já houve uma consulta bem-sucedida nesta sessão, os últimos dados continuam visíveis com o aviso **Dados desatualizados**, a idade da consulta e `!` na barra superior. Sem dados anteriores, a conta mostra `--` e a causa. Esses dados ficam somente em memória e são descartados ao trocar o provider/diretório ou desabilitar a extensão. Em HTTP 429, novas consultas (inclusive manuais) respeitam o Retry-After do provedor e uma espera progressiva de 5, 10, 20, 40 e até 60 minutos; o maior prazo prevalece. A próxima tentativa ocorre na primeira atualização periódica após esse prazo; uma consulta bem-sucedida remove o aviso e reinicia a espera.
 
 ## Desenvolvimento
 
@@ -74,12 +86,13 @@ Veja [validação e compatibilidade](docs/VALIDATION.md). As capturas de teste u
 - `providers/`: libsoup 3, endpoints fixos HTTPS e normalização de limites.
 - `services/accounts.js`: validação e ordem em GSettings; UUID estável por conta.
 - `services/credentials.js`: leitura assíncrona de credenciais existentes e libsecret opcional.
+- `services/reset-message.js`: envio opt-in pelo CLI do perfil, timeout e cancelamento.
 - `services/refresh.js`: até quatro contas em paralelo, Retry-After, geração de consultas e cancelamento.
 - `ui/`: componentes St (segmented, switch, grupos, identidade) e barra Cairo em pílula.
 - `extension.js`: PanelMenu, telas (detalhes, ajustes, editor) e lifecycle.
 - `prefs.js`: preferências GTK4/libadwaita para acesso pelo gerenciador de extensões.
 
-Todos os timers, sinais, bindings, efeitos e requests são removidos ao desabilitar. Não são iniciados subprocessos pela extensão. Trocar o provider/diretório de uma conta invalida imediatamente a quota daquele perfil.
+Todos os timers, sinais, bindings, efeitos e requests são removidos ao desabilitar. Subprocessos dos CLIs são iniciados apenas para contas com mensagem após reset ativada, sem interpretação de shell. Trocar o provider/diretório de uma conta invalida imediatamente a quota daquele perfil.
 
 ## Projeto Windows existente
 
