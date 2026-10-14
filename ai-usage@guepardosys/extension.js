@@ -226,13 +226,26 @@ export default class AIUsageExtension extends Extension {
         this._refreshButton.opacity = this._refresh.busy ? 150 : 255;
         if (this._refresh.busy && !this._spinning) { this._spinning = true; this._spin(); }
         else if (!this._refresh.busy && this._spinning) {
+            if (this._spinTimer) GLib.Source.remove(this._spinTimer);
+            this._spinTimer = 0;
             this._spinning = false; this._refreshIcon.remove_all_transitions(); this._refreshIcon.rotation_angle_z = 0;
         }
     }
     _spin() {
         if (!this._spinning || !this._refreshIcon) return;
-        this._refreshIcon.rotation_angle_z = 0;
-        this._refreshIcon.ease({rotation_angle_z: 360, duration: 900, mode: Clutter.AnimationMode.LINEAR, onComplete: () => this._spin()});
+        // ease() completes synchronously for unmapped actors or disabled animations.
+        // A completion callback that starts another animation would recurse forever.
+        const animate = () => {
+            if (this._refreshIcon.mapped && St.Settings.get().enable_animations) {
+                this._refreshIcon.rotation_angle_z = 0;
+                this._refreshIcon.ease({rotation_angle_z: 360, duration: 900, mode: Clutter.AnimationMode.LINEAR});
+            }
+        };
+        animate();
+        this._spinTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 900, () => {
+            animate();
+            return GLib.SOURCE_CONTINUE;
+        });
     }
     _bar(percent, name) { return new UsageBar(percent, {colored: this._settings.get_boolean('colored-bars'), dark: this._dark, name}); }
     _showDetails() {
@@ -476,6 +489,8 @@ export default class AIUsageExtension extends Extension {
         this._printSignal = 0;
         this._refresh?.destroy(); this._refresh = null;
         if (this._minute) GLib.Source.remove(this._minute);
+        if (this._spinTimer) GLib.Source.remove(this._spinTimer);
+        this._spinTimer = 0;
         this._minute = 0; this._spinning = false;
         for (const signal of this._signals ?? []) this._settings.disconnect(signal);
         this._signals = [];
