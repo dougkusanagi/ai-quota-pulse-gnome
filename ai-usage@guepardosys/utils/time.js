@@ -37,6 +37,15 @@ export function resetShort(timestamp, format = '24h', now = Date.now()) {
     if (format === 'relative') return `em ${relativeReset(timestamp, now)}`;
     return `${dayWord(new Date(timestamp * 1000), now)} - ${formatReset(timestamp, format)}`;
 }
+// Narrow column form used by the notch rows: "21:28" today, "dom 22:26" later, "em 3h12" when relative.
+export function resetCompact(timestamp, format = '24h', now = Date.now()) {
+    if (!timestamp || !Number.isFinite(timestamp)) return '—';
+    if (timestamp * 1000 <= now) return 'agora';
+    if (format === 'relative') return `em ${relativeReset(timestamp, now)}`;
+    const date = new Date(timestamp * 1000), today = new Date(now);
+    if (date.toDateString() === today.toDateString()) return formatReset(timestamp, format);
+    return `${date.toLocaleDateString('pt-BR', {weekday: 'short'}).replace('.', '')} ${formatReset(timestamp, format)}`;
+}
 export function updatedLabel(timestamp, now = Date.now()) {
     if (!timestamp) return 'Ainda não atualizado';
     const mins = Math.floor((now - timestamp * 1000) / 60000);

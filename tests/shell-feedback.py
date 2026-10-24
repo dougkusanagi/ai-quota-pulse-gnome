@@ -23,23 +23,23 @@ for theme in ('light', 'dark'):
             this._refresh.providers = {openai: fixture, claude: fixture};
             this._refresh.start();
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
-                this._indicator.menu.open();
+                this._notch.open();
                 GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
                     try {
-                        let card = this._body.get_first_child();
-                        let controls = card.get_first_child().get_last_child();
-                        let help = card.get_children()[1];
+                        let section = this._body.get_first_child();
+                        let controls = section.get_first_child().get_last_child();
+                        let help = section.get_children()[1].get_first_child();
                         if (help.visible) throw new Error('Help must start closed');
                         controls.get_first_child().emit('clicked', 1);
                         if (!help.visible || controls.get_last_child().checked) throw new Error('Help click changed switch or failed to open');
                         if (!help.get_first_child().text.includes('Mensagem após reset')) throw new Error('Help is not labeled');
                         this._showDetails();
-                        card = this._body.get_first_child();
-                        help = card.get_children()[1];
+                        section = this._body.get_first_child();
+                        help = section.get_children()[1].get_first_child();
                         if (!help.visible) throw new Error('Refresh lost expanded help');
-                        card.get_first_child().get_last_child().get_first_child().emit('clicked', 1);
+                        section.get_first_child().get_last_child().get_first_child().emit('clicked', 1);
                         if (help.visible) throw new Error('Help failed to close');
-                        const [width] = card.get_transformed_size();
+                        const [width] = section.get_transformed_size();
                         if (width > this._body.width) throw new Error('Help layout overflows card');
                         let maxRotation = 0;
                         this._refreshIcon.connect('notify::rotation-angle-z', () => {

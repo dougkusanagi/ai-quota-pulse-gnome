@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialsFor, cleanInitials} from '../ai-usage@guepardosys/utils/initials.js';
-import {formatReset, resetDetail, resetShort, updatedLabel} from '../ai-usage@guepardosys/utils/time.js';
+import {formatReset, resetCompact, resetDetail, resetShort, updatedLabel} from '../ai-usage@guepardosys/utils/time.js';
 import {normalizeOpenAI, normalizeClaude, primaryWindow} from '../ai-usage@guepardosys/providers/normalize.js';
 test('automatic initials preserve Unicode, first/last words and manual limit', () => {
     for (const [name, expected] of [['Bruno Almeida','BA'],['Loja Online','LO'],['Trabalho','TR'],['João Pedro Silva','JS'],['  Érica   Dias ','ÉD'],['','']]) assert.equal(initialsFor(name), expected);
@@ -60,6 +60,15 @@ test('short reset fits a heading', () => {
     const now = new Date(2026, 8, 30, 12, 0).getTime();
     assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, '24h', now), 'hoje - 15:12');
     assert.equal(resetShort(new Date(2026, 8, 30, 15, 12).getTime() / 1000, 'relative', now), 'em 3h12');
+});
+
+test('compact reset fits the notch column', () => {
+    const now = new Date(2026, 8, 30, 12, 0).getTime(), at = (d, h, m) => new Date(2026, 8, d, h, m).getTime() / 1000;
+    assert.equal(resetCompact(at(30, 15, 12), '24h', now), '15:12');
+    assert.equal(resetCompact(at(30, 15, 12), 'relative', now), 'em 3h12');
+    assert.match(resetCompact(at(2 + 28, 9, 5) + 86400 * 3, '24h', now), /^\S+ \d\d:\d\d$/);
+    assert.equal(resetCompact(at(30, 11, 0), '24h', now), 'agora');
+    assert.equal(resetCompact(null), '—');
 });
 
 test('session reset stays hidden until usage starts and disappears when elapsed', async () => {

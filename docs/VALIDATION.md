@@ -28,3 +28,21 @@ Estratégia sem branches: imports ES modules comuns a 46–50; feature detection
 Testes nativos headless emitiram avisos da infraestrutura de portals/IBus e do Clutter input focus ao alterar entradas por automação; não houve exceção GJS da extensão. Fluxo por mouse/teclado físico, leitores de tela, escala HiDPI e GNOME 46–49 requerem verificação nesses ambientes. Dados nas screenshots são fixtures de teste isolado; as consultas reais dos providers foram verificadas separadamente.
 
 Não há drag-and-drop; as setas oferecem reordenação nativa acessível. Keyring direto/legado Codex é lido via libsecret; Keyring gerenciado recente não é decodificado. O login deve ser renovado pelo CLI. Endpoints internos podem mudar ou negar acesso; a extensão relata a falha individualmente.
+
+## Notch (2026-10-24)
+
+- `make test-shell` roda quatro testes em GNOME Shell 50.1 headless: regressão de refresh, feedback/ajuda de reset, switches e `tests/shell-notch.py`, que usa ponteiro e teclado virtuais para validar posição dentro da barra à esquerda do relógio, abertura somente por clique, temas e fechamento com clique fora ou Esc.
+- `scripts/screenshot.py` gera as capturas de `docs/screenshots` com fixtures (sem rede nem credenciais).
+- Windows: `bun test` (8 testes), inicialização do Electron até a bandeja em Wayland com `--demo=2` sem erro de JS e geração do instalador NSIS no Linux. A interface não foi aberta num Windows real nesta máquina; hover, DPI e SmartScreen precisam de verificação lá.
+
+## Ajustes minimalistas (2026-10-24)
+
+Barras alinhadas ao centro com 5 px, controles compactos e tema no rodapé. Capturas headless em 1280×800 inspecionadas nos temas claro (uma conta por serviço) e escuro (múltiplas contas e falha de login). O teste do notch cobre a altura da barra, escolha de tema e sincronização com GSettings.
+
+## Posição abaixo da barra superior
+
+Teste headless confirma notch abaixo da barra, relógio sem sobreposição e hover restrito à área do notch. Capturas de abertura e fechamento conferidas em 1280×800. A posição usa coordenadas de layout para não incorporar a animação de entrada da barra do GNOME.
+
+## Indicador integrado à top bar
+
+Botão e popup nativos do GNOME substituem a superfície flutuante. `make check`, `make test` e `make test-shell` passaram localmente. Capturas inspecionadas em 1280×800 nos temas claro e escuro e em 800×600 com múltiplas contas, erro e editor com rolagem. A barra mantém o relógio livre; o painel só aparece ao clicar.

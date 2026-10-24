@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='aiusage-switch-test-') as directory:
             }
             this._body.add_child(surface);
         }
-        this._indicator.menu.open();
+        this._notch.open();
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
             try {
                 let offColor = null;

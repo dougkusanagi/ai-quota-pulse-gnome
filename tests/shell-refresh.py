@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='aiusage-shell-test-') as directory:
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1800, () => {
             if (this._refresh.busy || this._refresh.states.size !== 1 || this._spinTimer)
                 throw new Error('Closed popup refresh did not finish');
-            this._indicator.menu.open();
+            this._notch.open();
             this._refresh.refresh();
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1800, () => {
                 if (this._refresh.busy || this._spinTimer)
