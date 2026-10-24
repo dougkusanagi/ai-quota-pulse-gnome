@@ -9,10 +9,44 @@
     "start": "electron .",
     "demo": "electron . --demo",
     "demo:multi": "electron . --demo=2",
-    "test": "bun test"
+    "test": "bun test",
+    "dist": "electron-builder --win --x64",
+    "icon": "python3 scripts/make-icon.py"
   },
-  "trustedDependencies": ["electron"],
+  "trustedDependencies": [
+    "electron"
+  ],
   "devDependencies": {
-    "electron": "^45.0.0"
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "br.com.guepardosys.aiquotanotch",
+    "productName": "AI Quota Notch",
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "src/**",
+      "assets/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

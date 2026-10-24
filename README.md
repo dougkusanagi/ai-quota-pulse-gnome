@@ -1,6 +1,6 @@
 # AI Usage para GNOME Shell
 
-Extensão nativa em GJS para acompanhar **limites reais de assinatura** de N contas Codex/OpenAI e Claude. Indicadores lado a lado com logos locais, badges de perfil, horário do reset e trilho de uso. Popup claro/escuro sem efeitos de blur (superfícies sólidas e filetes, seguro para o compositor), detalhes de todas as janelas e ajustes internos que seguem a cor de destaque do sistema. Veja a [revisão de interface](docs/UI-REVIEW.md).
+Extensão nativa em GJS para acompanhar **limites reais de assinatura** de N contas Codex/OpenAI e Claude, com um indicador na barra superior, entre Atividades e a data/hora, com um anel por conta, que abre os detalhes ao clicar e mostra todas as janelas, resets e ajustes. Mesmo visual do [app para Windows](windows-notch/README.md). Superfícies sólidas, sem blur (seguro para o compositor), tema claro/escuro e ajustes que seguem a cor de destaque do sistema.
 
 ## Instalação
 
@@ -17,7 +17,7 @@ Na primeira instalação em **Wayland**, encerre a sessão e entre novamente par
 make enable
 ```
 
-Em Xorg, também é possível recarregar o Shell com Alt+F2 → `r`. Clique no indicador **AI** na barra superior e abra Uma janela de 5h sem uso ou já vencida mostra **aguardando mensagem**, sem horário na barra superior. O próximo reset aparece após o provedor confirmar o início da janela por uma mensagem; não é calculado localmente.
+Em Xorg, também é possível recarregar o Shell com Alt+F2 → `r`. Clique no indicador AI Usage, à esquerda da data/hora (ou navegue pela barra com Ctrl+Alt+Tab e use Enter), e abra **Ajustes** (engrenagem) → **Adicionar conta**. O indicador ocupa apenas a barra superior. O painel de detalhes aparece ao clicar; Esc ou um clique fora fecham o painel e retornam dos Ajustes para Detalhes.
 
 O ícone de envio ao lado do switch abre uma ajuda sobre a mensagem após reset e dá acesso a **Editar prompt**. O switch pequeno no cabeçalho de cada conta ativa **Mensagem após reset** (desligado por padrão). A extensão envia pelo CLI autenticado do perfil assim que uma consulta confirmar a janela de 5h disponível, inclusive ao ativar numa janela já disponível. Em **Editar conta**, o prompt padrão `Responda apenas: OK.` pode ser alterado (até 2000 caracteres). Uma consulta é agendada no horário do reset conhecido; durante suspensão ou com a extensão desligada, o envio aguarda a próxima consulta ao voltar.
 
@@ -47,6 +47,8 @@ As [descobertas e fontes](docs/RESEARCH.md) explicam os endpoints internos, que 
 
 ## Uso
 
+O painel usa barras finas de 5 px e controles compactos, como a versão Windows. No rodapé do painel aberto, os ícones de sol, lua e monitor selecionam Claro, Escuro e Sistema; a escolha fica salva.
+
 **Detalhes** mostra, por conta, nome, provider e plano, percentual restante, reset com dia/hora na mesma linha de cada janela e todas as janelas disponíveis; o subtítulo informa a última consulta bem-sucedida. A janela de aproximadamente 5h tem prioridade na top bar; na ausência dela, a semanal principal é usada..
 
 Uma janela de 5h sem uso ou já vencida mostra **aguardando mensagem**, sem horário na barra superior. O próximo reset aparece após o provedor confirmar o início da janela por uma mensagem; não é calculado localmente.
@@ -57,7 +59,7 @@ A mensagem inicia a próxima janela e consome um pouco da assinatura. O CLI `cod
 
 **Ajustes** (engrenagem) contém tema Auto/Claro/Escuro (padrão Auto, acompanha o GNOME em tempo real), formato do reset 24h/12h/relativo, barras coloridas, intervalo de 1–60 minutos e as contas. Cada conta pode ser reordenada pelas setas (acessível por teclado, sem drag-and-drop), ocultada da barra ou editada; o editor tem pré-visualização ao vivo, paleta, hex, iniciais automáticas até a primeira edição manual e **Remover** com confirmação. Fechar o popup sempre volta para Detalhes.
 
-A barra é desenhada da direita para a esquerda e muda de cor conforme o que resta: verde acima de 40%, âmbar até 15% e vermelho abaixo disso. Com barras coloridas desligadas, o preenchimento é monocromático. Falhas são independentes. Se já houve uma consulta bem-sucedida nesta sessão, os últimos dados continuam visíveis com o aviso **Dados desatualizados**, a idade da consulta e `!` na barra superior. Sem dados anteriores, a conta mostra `--` e a causa. Esses dados ficam somente em memória e são descartados ao trocar o provider/diretório ou desabilitar a extensão. Em HTTP 429, novas consultas (inclusive manuais) respeitam o Retry-After do provedor e uma espera progressiva de 5, 10, 20, 40 e até 60 minutos; o maior prazo prevalece. A próxima tentativa ocorre na primeira atualização periódica após esse prazo; uma consulta bem-sucedida remove o aviso e reinicia a espera.
+O indicador compacto mostra um anel por conta (Claude à esquerda, Codex à direita; com mais de uma conta do mesmo serviço, o anel leva as iniciais). Nas janelas abertas, a barra enche da esquerda para a direita e muda de cor conforme o que resta: verde acima de 40%, âmbar até 15% e vermelho abaixo disso. Com barras coloridas desligadas, o preenchimento é monocromático. Falhas são independentes. Se já houve uma consulta bem-sucedida nesta sessão, os últimos dados continuam visíveis com o aviso **Dados desatualizados**, a idade da consulta e `!` no indicador. Sem dados anteriores, a conta mostra `--` e a causa. Esses dados ficam somente em memória e são descartados ao trocar o provider/diretório ou desabilitar a extensão. Em HTTP 429, novas consultas (inclusive manuais) respeitam o Retry-After do provedor e uma espera progressiva de 5, 10, 20, 40 e até 60 minutos; o maior prazo prevalece. A próxima tentativa ocorre na primeira atualização periódica após esse prazo; uma consulta bem-sucedida remove o aviso e reinicia a espera.
 
 ## Desenvolvimento
 
@@ -94,6 +96,6 @@ Veja [validação e compatibilidade](docs/VALIDATION.md). As capturas de teste u
 
 Todos os timers, sinais, bindings, efeitos e requests são removidos ao desabilitar. Subprocessos dos CLIs são iniciados apenas para contas com mensagem após reset ativada, sem interpretação de shell. Trocar o provider/diretório de uma conta invalida imediatamente a quota daquele perfil.
 
-## Windows (protótipo)
+## Windows
 
-Indicador discreto no topo da tela, no estilo do notch do MacBook. Veja [windows-notch/README.md](windows-notch/README.md).
+O mesmo notch para Windows 11 (Electron): fechado mostra o restante da janela de 5h, ao passar o mouse abre com 5h e semanal, resets e tema. Instalador, bandeja e detalhes em [windows-notch/README.md](windows-notch/README.md).

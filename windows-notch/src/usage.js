@@ -51,7 +51,11 @@ async function request(url, headers) {
     signal: AbortSignal.timeout(20000),
   });
   if (res.status === 401 || res.status === 403) throw new Error('Login recusado. Entre novamente pelo CLI.');
-  if (res.status === 429) throw new Error('Muitas consultas. Tentaremos de novo em alguns minutos.');
+  if (res.status === 429) {
+    const e = new Error('Muitas consultas. Tentaremos de novo em alguns minutos.');
+    e.retryAfterMs = Math.max(0, Number(res.headers.get('retry-after')) * 1000) || 0;
+    throw e;
+  }
   if (!res.ok) throw new Error(`O serviço respondeu com erro ${res.status}.`);
   return res.json();
 }
@@ -125,13 +129,28 @@ function demo(accounts = 1, now = Date.now()) {
   return list;
 }
 
-async function fetchAll(home) {
+// Falha com dados anteriores: mantém os números, marca como desatualizado e guarda o motivo.
+function keepStale(prev, error, retryAfterMs) {
+  if (!prev?.ok || !prev.windows) return null;
+  return { ...prev, stale: true, error, staleSince: prev.staleSince ?? prev.fetchedAt ?? null, retryAfterMs };
+}
+
+// Espera progressiva de 5, 10, 20, 40 e até 60 minutos; o Retry-After do serviço vale se for maior.
+function backoffMs(failures, retryAfterMs = 0) {
+  return Math.max(retryAfterMs, Math.min(60, 5 * 2 ** Math.max(0, failures - 1)) * 60e3);
+}
+
+async function fetchAll(home, previous = []) {
   const profiles = await discoverProfiles(home);
+  const before = new Map(previous.map(a => [a.id, a]));
   return Promise.all(profiles.map(async ({ provider, dir, name, initials }) => {
     const base = { id: `${provider}:${dir}`, provider, name, initials };
-    try { return { ...base, ok: true, ...(await PROVIDERS[provider].read(dir)) }; }
-    catch (e) { return { ...base, ok: false, error: e.message }; }
+    try { return { ...base, ok: true, fetchedAt: Date.now(), ...(await PROVIDERS[provider].read(dir)) }; }
+    catch (e) {
+      const stale = keepStale(before.get(base.id), e.message, e.retryAfterMs);
+      return stale ?? { ...base, ok: false, error: e.message, retryAfterMs: e.retryAfterMs };
+    }
   }));
 }
 
-module.exports = { normalizeClaude, normalizeOpenAI, resetMs, profileName, discoverProfiles, fetchAll, demo };
+module.exports = { keepStale, backoffMs, normalizeClaude, normalizeOpenAI, resetMs, profileName, discoverProfiles, fetchAll, demo };

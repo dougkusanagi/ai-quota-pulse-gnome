@@ -1,5 +1,5 @@
 const { test, expect } = require('bun:test');
-const { normalizeClaude, normalizeOpenAI, resetMs } = require('../src/usage');
+const { normalizeClaude, normalizeOpenAI, resetMs, keepStale, backoffMs } = require('../src/usage');
 
 test('Claude: 5h e semanal com restante calculado', () => {
   const r = normalizeClaude({ five_hour: { utilization: 38, resets_at: '2026-10-24T18:00:00Z' }, seven_day: { utilization: 19 } });
@@ -49,4 +49,21 @@ test('discoverProfiles inclui o padrão e só irmãos com login', () => {
   return discoverProfiles(home).then(list => {
     expect(list.map(p => `${p.provider}:${p.name}`).sort()).toEqual(['claude:Principal', 'claude:Work', 'codex:B', 'codex:Principal']);
   });
+});
+
+test('falha com dados anteriores mantém os números como desatualizados', () => {
+  const prev = { id: 'claude:x', ok: true, windows: [{ minutes: 300, remaining: 40 }], fetchedAt: 1000 };
+  const s = keepStale(prev, 'Login recusado.', 0);
+  expect(s).toMatchObject({ ok: true, stale: true, error: 'Login recusado.', staleSince: 1000 });
+  expect(s.windows).toEqual(prev.windows);
+  expect(keepStale({ ...s, fetchedAt: 5000 }, 'de novo').staleSince).toBe(1000);
+  expect(keepStale({ ok: false }, 'x')).toBeNull();
+  expect(keepStale(undefined, 'x')).toBeNull();
+});
+
+test('espera progressiva de 5 a 60 minutos respeita o Retry-After maior', () => {
+  const min = m => m * 60e3;
+  expect([1, 2, 3, 4, 5, 9].map(n => backoffMs(n))).toEqual([min(5), min(10), min(20), min(40), min(60), min(60)]);
+  expect(backoffMs(1, min(90))).toBe(min(90));
+  expect(backoffMs(3, min(2))).toBe(min(20));
 });

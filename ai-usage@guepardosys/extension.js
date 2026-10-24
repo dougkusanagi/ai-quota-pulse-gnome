@@ -1,49 +1,40 @@
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
-import Shell from 'gi://Shell';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {Accounts} from './services/accounts.js';
 import {RefreshService} from './services/refresh.js';
 import {DEFAULT_RESET_PROMPT, waitingForMessage, visibleReset} from './utils/session.js';
-import {formatReset, resetShort, updatedLabel} from './utils/time.js';
+import {formatReset, resetShort, resetCompact, updatedLabel} from './utils/time.js';
 import {initialsFor, cleanInitials} from './utils/initials.js';
 import {UsageBar} from './ui/bar.js';
+import {UsageRing, ringWithInitials} from './ui/ring.js';
+import {Notch} from './ui/notch.js';
 import {box, label, wrapped, glyph, button, iconButton, identity, segmented, toggle, settingRow, group, resetIcon, tooltip} from './ui/widgets.js';
 
 export default class AIUsageExtension extends Extension {
     enable() {
+        this._themeButtons = new Map();
         this._settings = this.getSettings(); this._accounts = new Accounts(this._settings);
         this._view = 'details'; this._editor = null; this._dark = false; this._resetHelp = new Set();
-        this._indicator = new PanelMenu.Button(0.5, 'AI Usage');
-        this._top = box(false, 'ai-top'); this._indicator.add_child(this._top);
-        Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
-        this._indicator.menu.actor.add_style_class_name('ai-menu');
-        const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
-        this._root = box(true, 'ai-root', {x_expand: true}); item.add_child(this._root);
-        this._indicator.menu.addMenuItem(item);
+        this._top = box(false, 'ai-top', {reactive: false});
+        this._root = box(true, 'ai-root', {x_expand: true});
+        this._notch = new Notch({compact: this._top, panel: this._root,
+            onOpenChanged: open => this._openChanged(open), onDismiss: () => { if (this._view !== 'details') this._go('details'); }});
         this._systemSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
         this._themeSignal = this._systemSettings.connect('changed::color-scheme', () => this._syncTheme());
         this._hasAccent = Gio.SettingsSchemaSource.get_default().lookup('org.gnome.desktop.interface', true)?.has_key('accent-color');
         this._accentSignal = this._hasAccent ? this._systemSettings.connect('changed::accent-color', () => this._syncTheme()) : 0;
         this._syncTheme();
         this._buildShell();
-        this._setupScreenshotShortcut();
         this._refresh = new RefreshService(this._accounts, this._settings, () => this._render());
         this._signals = [this._settings.connect('changed', (_s, key) => {
             if (key === 'theme') this._syncTheme();
             this._render();
             if (this._view === 'settings' && key === 'accounts') this._showSettings();
         })];
-        this._menuSignal = this._indicator.menu.connect('open-state-changed', (_menu, open) => {
-            if (open) { if (this._view === 'details' && this._shownSignature !== this._signature) this._showDetails(); }
-            else if (this._view !== 'details') this._go('details');
-        });
         this._minute = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 60, () => { this._render(); return GLib.SOURCE_CONTINUE; });
         this._refresh.start();
     }
@@ -51,101 +42,46 @@ export default class AIUsageExtension extends Extension {
         const theme = this._settings.get_string('theme');
         const dark = theme === 'dark' || (theme === 'auto' &&
             this._systemSettings.get_string('color-scheme') === 'prefer-dark');
-        const actor = this._indicator.menu.actor;
-        if (dark) actor.add_style_class_name('ai-dark');
-        else actor.remove_style_class_name('ai-dark');
+        const actor = this._notch.actor;
+        for (const surface of [actor, this._notch.menu.actor]) {
+            if (dark) surface.add_style_class_name('ai-dark');
+            else surface.remove_style_class_name('ai-dark');
+        }
         // Follow the system accent colour (GNOME 47+); blue elsewhere.
         const accent = this._hasAccent ? this._systemSettings.get_string('accent-color') : 'blue';
-        if (this._accentClass) actor.remove_style_class_name(this._accentClass);
+        if (this._accentClass) {
+            actor.remove_style_class_name(this._accentClass);
+            this._notch.menu.actor.remove_style_class_name(this._accentClass);
+        }
         this._accentClass = `ai-accent-${accent}`; actor.add_style_class_name(this._accentClass);
+        this._notch.menu.actor.add_style_class_name(this._accentClass);
         if (this._dark !== dark) { this._dark = dark; this._signature = null; if (this._refresh) this._render(); }
+        this._syncThemeButtons();
     }
-    _setupScreenshotShortcut() {
-        // Mutter filters global accelerators before Clutter emits key events.
-        // Resolve Print's hardware keycodes from the current Xwayland keymap.
-        this._printKeycodes = [];
-        this._printBindings = new Map();
-        this._captureMenuDetached = false;
-        this._resolvePrintKeycodes();
-        const menu = this._indicator.menu;
-        this._printMenuSignal = menu.connect('open-state-changed', (_menu, open) => {
-            if (open) {
-                for (const code of this._printKeycodes) {
-                    const action = global.display.get_keybinding_action(code, 0);
-                    if (action === Meta.KeyBindingAction.NONE) continue;
-                    const name = Meta.external_binding_name_for_action(action);
-                    const modes = Main.wm._allowedKeybindings[name];
-                    if (modes === undefined || this._printBindings.has(action)) continue;
-                    this._printBindings.set(action, {name, modes});
-                    Main.wm.allowKeybinding(name, modes | Shell.ActionMode.POPUP);
-                }
-            } else {
-                this._restorePrintBindings();
-                if (this._captureMenuDetached) {
-                    this._captureMenuDetached = false;
-                    Main.panel.menuManager.addMenu(menu);
-                }
-            }
-        });
-        this._printSignal = global.display.connect('accelerator-activated', (_display, action) => {
-            if (!menu.isOpen || !this._printBindings.has(action)) return;
-            // The normal media-key daemon launches Flameshot. Release the modal
-            // grab first, without closing/hiding the menu or launching twice.
-            Main.panel.menuManager.removeMenu(menu);
-            this._captureMenuDetached = true;
-            this._restorePrintBindings();
-        });
-    }
-    _resolvePrintKeycodes() {
-        // Never wait synchronously for an X11 client inside the compositor:
-        // Xwayland may need the Shell main loop to finish starting at login.
-        const cancellable = new Gio.Cancellable();
-        this._keymapCancellable = cancellable;
-        try {
-            const process = Gio.Subprocess.new(['xmodmap', '-pke'],
-                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
-            let timeout = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
-                timeout = 0;
-                cancellable.cancel();
-                return GLib.SOURCE_REMOVE;
-            });
-            const cancelSignal = cancellable.connect(() => process.force_exit());
-            process.communicate_utf8_async(null, cancellable, (source, result) => {
-                if (timeout) GLib.Source.remove(timeout);
-                cancellable.disconnect(cancelSignal);
-                try {
-                    const [ok, output] = source.communicate_utf8_finish(result);
-                    if (cancellable.is_cancelled() || this._keymapCancellable !== cancellable) return;
-                    if (ok && source.get_successful()) {
-                        for (const line of output.split('\n')) {
-                            const match = line.match(/^keycode\s+(\d+)\s*=\s*Print(?:\s|$)/);
-                            if (match) this._printKeycodes.push(Number(match[1]));
-                        }
-                    }
-                } catch (error) {
-                    if (!cancellable.is_cancelled())
-                        console.error(`AI Usage: cannot resolve Print keycodes: ${error.message}`);
-                } finally {
-                    if (this._keymapCancellable === cancellable) this._keymapCancellable = null;
-                }
-            });
-        } catch (error) {
-            this._keymapCancellable = null;
-            console.error(`AI Usage: cannot resolve Print keycodes: ${error.message}`);
+    _syncThemeButtons() {
+        const selected = this._settings.get_string('theme');
+        for (const [value, item] of this._themeButtons ?? []) {
+            item.checked = value === selected;
+            if (item.checked) item.add_style_class_name('selected');
+            else item.remove_style_class_name('selected');
         }
     }
-    _restorePrintBindings() {
-        for (const {name, modes} of this._printBindings?.values() ?? [])
-            Main.wm.allowKeybinding(name, modes);
-        this._printBindings?.clear();
-    }
     _buildShell() {
+        // Windows layout: a bare list of usage rows, with the controls in a footer. The header only appears on sub-views.
         const header = box(false, 'ai-header');
         this._backButton = iconButton('go-previous-symbolic', 'Voltar', () => this._go(this._view === 'editor' ? 'settings' : 'details'));
-        const names = box(true, 'ai-header-names', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        this._title = label('AI Usage', 'ai-title', {x_align: Clutter.ActorAlign.START});
-        this._status = label('Ainda não atualizado', 'ai-subtitle', {x_align: Clutter.ActorAlign.START});
-        names.add_child(this._title); names.add_child(this._status);
+        this._title = label('AI Usage', 'ai-title', {x_align: Clutter.ActorAlign.START, x_expand: true});
+        header.add_child(this._backButton); header.add_child(this._title);
+        this._header = header; header.hide(); this._root.add_child(header);
+        this._scroll = new St.ScrollView({style_class: 'ai-scroll', overlay_scrollbars: false, x_expand: true});
+        this._body = box(true, 'ai-body', {x_expand: true});
+        // add_child replaced set_child in newer St; feature detection keeps 46–50 on one code path.
+        if (typeof this._scroll.set_child === 'function') this._scroll.set_child(this._body); else if (typeof this._scroll.add_child === 'function') this._scroll.add_child(this._body);
+        else this._scroll.add_actor(this._body);
+        this._root.add_child(this._scroll);
+        this._footer = box(false, 'ai-footer');
+        this._status = label('Ainda não atualizado', 'ai-subtitle', {x_align: Clutter.ActorAlign.START, x_expand: true});
+        this._status.clutter_text.ellipsize = 3;
         this._refreshButton = iconButton('view-refresh-symbolic', 'Atualizar agora', () => this._refresh?.refresh());
         this._refreshIcon = this._refreshButton.get_child();
         this._refreshIcon.set_pivot_point(0.5, 0.5);
@@ -154,14 +90,22 @@ export default class AIUsageExtension extends Extension {
             else if (this._refresh?.busy && !this._spinning) this._spin();
         });
         this._settingsButton = iconButton('emblem-system-symbolic', 'Ajustes', () => this._go('settings'));
-        for (const child of [this._backButton, names, this._refreshButton, this._settingsButton]) header.add_child(child);
-        this._backButton.hide(); this._root.add_child(header);
-        this._scroll = new St.ScrollView({style_class: 'ai-scroll', overlay_scrollbars: false, x_expand: true});
-        this._body = box(true, 'ai-body', {x_expand: true});
-        // add_child replaced set_child in newer St; feature detection keeps 46–50 on one code path.
-        if (typeof this._scroll.set_child === 'function') this._scroll.set_child(this._body); else if (typeof this._scroll.add_child === 'function') this._scroll.add_child(this._body);
-        else this._scroll.add_actor(this._body);
-        this._root.add_child(this._scroll);
+        const themes = box(false, 'ai-theme', {accessible_name: 'Tema', y_align: Clutter.ActorAlign.CENTER});
+        this._themeButtons = new Map();
+        for (const [value, name, icon] of [['light', 'Claro', 'weather-clear-symbolic'], ['dark', 'Escuro', 'weather-clear-night-symbolic'], ['auto', 'Sistema', 'video-display-symbolic']]) {
+            const item = iconButton(icon, `Tema ${name}`, () => this._settings.set_string('theme', value), 'ai-theme-button');
+            item.toggle_mode = true;
+            item.get_child().icon_size = 12;
+            tooltip(item, `Tema ${name}`);
+            this._themeButtons.set(value, item); themes.add_child(item);
+        }
+        this._syncThemeButtons();
+        for (const child of [this._status, themes, this._refreshButton, this._settingsButton]) this._footer.add_child(child);
+        this._root.add_child(this._footer);
+    }
+    _openChanged(open) {
+        if (open && this._view === 'details' && this._shownSignature !== this._signature) this._showDetails();
+        if (open) this._updateChrome();
     }
     // Views: details (default), settings, editor. Leaving the popup always returns to details.
     _go(view) {
@@ -169,17 +113,19 @@ export default class AIUsageExtension extends Extension {
         if (view !== 'editor') this._editor = null;
         if (this._view === 'details') this._showDetails(); else if (view === 'settings') this._showSettings(); else this._buildEditor(this._editor ?? {});
         this._updateChrome();
+        // Native popup menu keeps entries interactive until the menu is dismissed.
+        this._notch.pin(view !== 'details'); this._notch.refit();
         if (this._scroll.vadjustment) this._scroll.vadjustment.value = 0;
         // A short fade makes the swap feel continuous; opacity is cheap, unlike blur effects.
         this._body.opacity = 0; this._body.ease({opacity: 255, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
     _render() {
-        if (!this._indicator || !this._refresh) return;
-        const monitor = Main.layoutManager.findMonitorForActor(this._indicator) ?? Main.layoutManager.primaryMonitor;
+        if (!this._notch || !this._refresh) return;
+        const monitor = Main.layoutManager.primaryMonitor;
         // Keep header and list inside the popup: the list gets whatever the work area leaves.
         if (monitor) {
             const area = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
-            const style = `max-height: ${Math.max(160, Math.min(580, area.height - 150))}px;`;
+            const style = `max-height: ${Math.max(160, Math.min(560, area.height - 130))}px;`;
             if (style !== this._scrollStyle) { this._scrollStyle = style; this._scroll.set_style(style); }
         }
         // Skip rebuilding identical content: destroying actors every tick makes the panel and list flash.
@@ -190,38 +136,62 @@ export default class AIUsageExtension extends Extension {
         if (changed) this._buildTop();
         this._updateChrome();
         // Details are rebuilt only while visible; opening the popup catches up on anything missed.
-        if (this._view === 'details' && this._indicator.menu.isOpen && this._shownSignature !== signature) this._showDetails();
+        if (this._view === 'details' && this._notch.isOpen && this._shownSignature !== signature) { this._showDetails(); this._notch.refit(); }
     }
+    _logo(provider, size = 13) {
+        return new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(`${this.path}/icons/${provider}-symbolic.svg`)), icon_size: size,
+            style_class: provider === 'openai' ? 'ai-logo-panel' : 'ai-claude-logo', y_align: Clutter.ActorAlign.CENTER});
+    }
+    // Closed notch: Claude on the left, Codex on the right, one ring per account (initials inside when a provider has several).
     _buildTop() {
         this._top.destroy_all_children();
         const visible = this._accounts.list().filter(a => a.visible);
         const colored = this._settings.get_boolean('colored-bars'), format = this._settings.get_string('reset-format');
         if (!visible.length) {
-            this._top.add_child(new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(`${this.path}/icons/meters-symbolic.svg`)), icon_size: 16}));
+            this._top.add_child(new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(`${this.path}/icons/meters-symbolic.svg`)), icon_size: 14, style_class: 'ai-logo-panel'}));
             this._top.add_child(label('AI', 'ai-time'));
         }
-        visible.forEach((account, index) => {
-            if (index) this._top.add_child(new St.Widget({style_class: 'ai-top-divider'}));
-            const group = box(false, 'ai-top-account', {accessible_name: `${account.name}, ${account.provider}`});
-            group.add_child(identity(account, this.path, {panel: true}));
-            const content = box(true, 'ai-top-meter', {y_align: Clutter.ActorAlign.CENTER});
-            const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
-            content.add_child(label(`${state?.error && primary ? '! ' : ''}${formatReset(visibleReset(primary), format)}`, 'ai-time', {x_align: Clutter.ActorAlign.CENTER}));
-            content.add_child(new UsageBar(primary?.remaining ?? 0, {colored, compact: true}, {x_align: Clutter.ActorAlign.CENTER}));
-            group.add_child(content); this._top.add_child(group);
-        });
-        this._indicator.accessible_name = 'AI Usage. ' + this._accounts.list().map(account => {
+        const byProvider = {claude: visible.filter(a => a.provider === 'claude'), openai: visible.filter(a => a.provider === 'openai')};
+        this._pulse = new St.Widget({style_class: 'ai-pulse', y_align: Clutter.ActorAlign.CENTER});
+        let first = true;
+        for (const provider of ['claude', 'openai']) {
+            const list = byProvider[provider];
+            if (!list.length) continue;
+            if (!first) this._top.add_child(this._pulse);
+            first = false;
+            const multi = list.length > 1, group = box(false, 'ai-top-group');
+            const items = box(false, 'ai-top-items', {y_align: Clutter.ActorAlign.CENTER});
+            for (const account of list) {
+                const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
+                const percent = primary?.remaining ?? 0, failed = !primary;
+                const chip = box(false, state?.error ? 'ai-chip-top ai-chip-err' : 'ai-chip-top', {
+                    y_align: Clutter.ActorAlign.CENTER,
+                    accessible_name: `${account.name}, ${provider}: ${primary ? `${Math.round(percent)}% restante` : state?.error ?? 'aguardando consulta'}`});
+                const opts = {colored, dark: this._dark, failed};
+                const ring = multi ? ringWithInitials(percent, failed ? '!' : account.initials, opts) : new UsageRing(percent, opts, {y_align: Clutter.ActorAlign.CENTER});
+                const text = multi ? null : label(primary ? `${Math.round(percent)}%` : '--', 'ai-top-percent');
+                if (provider === 'openai' && text) chip.add_child(text);
+                chip.add_child(ring);
+                if (provider !== 'openai' && text) chip.add_child(text);
+                items.add_child(chip);
+            }
+            if (provider === 'openai') { group.add_child(items); group.add_child(this._logo(provider)); }
+            else { group.add_child(this._logo(provider)); group.add_child(items); }
+            this._top.add_child(group);
+        }
+        this._notch.actor.accessible_name = 'AI Usage. ' + this._accounts.list().map(account => {
             const state = this._refresh.states.get(account.id), primary = state?.usage?.primary;
             return `${account.provider}, ${account.name}, ${account.initials}, ${primary ? `${state.error ? 'dados desatualizados, ' : ''}${Math.round(primary.remaining)}% restante, reset ${formatReset(visibleReset(primary), format)}` : state?.error ?? 'aguardando consulta'}`;
         }).join('. ');
     }
     _updateChrome() {
         const view = this._view, details = view === 'details';
-        this._backButton.visible = !details;
+        this._header.visible = !details; this._footer.visible = details;
         const empty = !this._accounts.list().length;
         this._refreshButton.visible = details && !empty; this._settingsButton.visible = details;
         this._title.text = details ? 'AI Usage' : view === 'settings' ? 'Ajustes' : (this._editor?.id ? 'Editar conta' : 'Nova conta');
         this._status.visible = details && !empty;
+        if (this._pulse) this._pulse.opacity = this._refresh.busy ? 255 : 100;
         const states = [...this._refresh.states.values()];
         const last = Math.max(0, ...states.map(s => s.updated ?? 0));
         this._status.text = this._refresh.busy ? 'Atualizando…' : updatedLabel(last);
@@ -256,6 +226,41 @@ export default class AIUsageExtension extends Extension {
             }});
     }
     _bar(percent, name) { return new UsageBar(percent, {colored: this._settings.get_boolean('colored-bars'), dark: this._dark, name}); }
+    _controls(account, state) {
+        const controls = box(false, 'ai-reset-controls', {y_align: Clutter.ActorAlign.CENTER});
+        const help = box(true, 'ai-reset-help');
+        help.add_child(label('Mensagem após reset de 5h', 'ai-row-title'));
+        help.add_child(wrapped('Quando a janela de 5h estiver disponível, envia uma mensagem curta por esta conta. Isso inicia a próxima janela e usa um pouco do limite. Se já estiver disponível, envia ao ativar.', 'ai-caption'));
+        help.add_child(wrapped('Uma tentativa por janela. A extensão precisa estar ativa e o CLI da conta, autenticado.', 'ai-caption'));
+        help.add_child(button('Editar prompt', () => { this._editor = account; this._go('editor'); }, 'document-edit-symbolic'));
+        help.visible = this._resetHelp.has(account.id);
+        const helpButton = iconButton('mail-send-symbolic', `Ajuda: mensagem após reset · ${account.name}`, () => {
+            help.visible = !help.visible;
+            helpButton.checked = help.visible;
+            if (help.visible) this._resetHelp.add(account.id); else this._resetHelp.delete(account.id);
+            this._notch.refit();
+        }, 'ai-reset-help-button');
+        helpButton.toggle_mode = true;
+        helpButton.checked = help.visible;
+        tooltip(helpButton, 'Mensagem após reset de 5h · clique para saber mais');
+        controls.add_child(helpButton);
+        controls.add_child(toggle(`Mensagem após reset · ${account.name}`, account.autoResetMessage,
+            active => this._accounts.put({...account, autoResetMessage: active})));
+        return {controls, help};
+    }
+    _windowRow(window, format) {
+        const percent = Math.round(window.remaining), waiting = waitingForMessage(window);
+        const row = box(false, 'ai-limit-row');
+        const name = String(window.label).replace('5 horas', '5h').replace('Semanal', 'Semana');
+        const title = label(name, 'ai-limit-name'); title.clutter_text.ellipsize = 3; row.add_child(title);
+        row.add_child(this._bar(window.remaining, `${window.label}: ${percent}% restante`));
+        row.add_child(label(`${percent}%`, percent <= 15 ? 'ai-percent ai-percent-low' : 'ai-percent', {x_align: Clutter.ActorAlign.END}));
+        const reset = label(waiting ? 'sem uso' : resetCompact(window.reset, format), 'ai-reset-text', {x_align: Clutter.ActorAlign.END});
+        row.add_child(reset);
+        tooltip(row, waiting ? 'Janela sem uso: começa na próxima mensagem' : `Renova ${resetShort(window.reset, format)}`);
+        row.reactive = true; row.track_hover = true;
+        return row;
+    }
     _showDetails() {
         this._shownSignature = this._signature;
         const scrollValue = this._scroll.vadjustment?.value ?? 0;
@@ -270,85 +275,71 @@ export default class AIUsageExtension extends Extension {
             const add = button('Adicionar conta', () => { this._editor = {}; this._go('editor'); }, 'list-add-symbolic', 'ai-button ai-primary');
             add.x_align = Clutter.ActorAlign.CENTER; empty.add_child(add); this._body.add_child(empty);
         }
-        for (const account of accounts) {
-            const card = box(true, 'ai-card');
-            const heading = box(false, 'ai-account-heading'); heading.add_child(identity(account, this.path));
-            const state = this._refresh?.states.get(account.id);
-            const names = box(true, 'ai-names', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-            const plan = state?.usage?.plan ? ` · ${String(state.usage.plan).replace(/^./, c => c.toUpperCase())}` : '';
-            names.add_child(label(account.name, 'ai-account-name', {x_align: Clutter.ActorAlign.START}));
-            names.add_child(label(`${account.provider === 'openai' ? 'Codex' : 'Claude'}${plan}`, 'ai-caption', {x_align: Clutter.ActorAlign.START}));
-            heading.add_child(names);
-            const controls = box(false, 'ai-reset-controls', {y_align: Clutter.ActorAlign.CENTER});
-            const help = box(true, 'ai-reset-help');
-            help.add_child(label('Mensagem após reset de 5h', 'ai-row-title'));
-            help.add_child(wrapped('Quando a janela de 5h estiver disponível, envia uma mensagem curta por esta conta. Isso inicia a próxima janela e usa um pouco do limite. Se já estiver disponível, envia ao ativar.', 'ai-caption'));
-            help.add_child(wrapped('Uma tentativa por janela. A extensão precisa estar ativa e o CLI da conta, autenticado.', 'ai-caption'));
-            help.add_child(button('Editar prompt', () => { this._editor = account; this._go('editor'); }, 'document-edit-symbolic'));
-            help.visible = this._resetHelp.has(account.id);
-            const helpButton = iconButton('mail-send-symbolic', `Ajuda: mensagem após reset · ${account.name}`, () => {
-                help.visible = !help.visible;
-                helpButton.checked = help.visible;
-                if (help.visible) this._resetHelp.add(account.id); else this._resetHelp.delete(account.id);
-            }, 'ai-reset-help-button');
-            helpButton.toggle_mode = true;
-            helpButton.checked = help.visible;
-            tooltip(helpButton, 'Mensagem após reset de 5h · clique para saber mais');
-            controls.add_child(helpButton);
-            controls.add_child(toggle(`Mensagem após reset · ${account.name}`, account.autoResetMessage,
-                active => this._accounts.put({...account, autoResetMessage: active})));
-            heading.add_child(controls);
-            card.add_child(heading);
-            card.add_child(help);
-            if (account.autoResetMessage && (state?.messageSending || state?.messageError)) {
-                const status = box(false, 'ai-reset-status');
-                status.add_child(glyph('mail-send-symbolic', 12, state.messageError ? 'ai-error' : 'ai-caption'));
-                status.add_child(wrapped(state.messageSending ? 'Mensagem após reset: enviando…' : `Mensagem após reset: ${state.messageError}`,
-                    state.messageError ? 'ai-error' : 'ai-caption', {x_expand: true}));
-                card.add_child(status);
-            }
-            if (state?.error) {
-                const callout = box(false, 'ai-callout');
-                callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
-                const text = box(true, 'ai-callout-text', {x_expand: true});
-                text.add_child(label(state.usage ? 'Dados desatualizados' : 'Não foi possível atualizar', 'ai-callout-title', {x_align: Clutter.ActorAlign.START}));
-                text.add_child(wrapped(state.error, 'ai-caption'));
-                if (state.usage) text.add_child(wrapped(`Última consulta: ${updatedLabel(state.updated).replace(/^Atualizado/, 'atualizado')}.`, 'ai-caption'));
-                if (state.retryAt) text.add_child(wrapped(`Nova tentativa automática: ${resetShort(state.retryAt / 1000, format)}.`, 'ai-caption'));
-                callout.add_child(text); card.add_child(callout);
-            }
-            if (!state?.usage) {
-                if (!state?.error) {
-                    const limit = box(true, 'ai-limit');
-                    limit.add_child(label('Consultando…', 'ai-caption', {x_align: Clutter.ActorAlign.START}));
-                    limit.add_child(this._bar(0, 'Consultando')); card.add_child(limit);
+        for (const provider of ['claude', 'openai']) {
+            const list = accounts.filter(a => a.provider === provider);
+            if (!list.length) continue;
+            const multi = list.length > 1, section = box(true, 'ai-prov');
+            const head = box(false, 'ai-prov-head');
+            head.add_child(this._logo(provider, 15));
+            head.add_child(label(provider === 'openai' ? 'Codex' : 'Claude', 'ai-prov-name'));
+            const planOf = account => { const plan = this._refresh?.states.get(account.id)?.usage?.plan; return plan ? String(plan).replace(/^./, c => c.toUpperCase()) : null; };
+            if (!multi && planOf(list[0])) head.add_child(label(planOf(list[0]), 'ai-plan'));
+            head.add_child(new St.Widget({x_expand: true}));
+            section.add_child(head);
+            for (const account of list) {
+                const state = this._refresh?.states.get(account.id);
+                const {controls, help} = this._controls(account, state);
+                const card = box(true, multi ? 'ai-account ai-account-multi' : 'ai-account');
+                if (multi) {
+                    const ah = box(false, 'ai-acc-head');
+                    const badge = new St.Bin({style_class: 'ai-badge-chip', y_align: Clutter.ActorAlign.CENTER,
+                        child: new St.Label({text: account.initials, style_class: 'ai-badge-chip-text'})});
+                    badge.set_style(`background-color: ${account.color};`);
+                    ah.add_child(badge); ah.add_child(label(account.name, 'ai-acc-name'));
+                    if (planOf(account)) ah.add_child(label(planOf(account), 'ai-plan'));
+                    ah.add_child(new St.Widget({x_expand: true})); ah.add_child(controls); card.add_child(ah);
+                } else head.add_child(controls);
+                card.add_child(help);
+                if (account.autoResetMessage && (state?.messageSending || state?.messageError)) {
+                    const status = box(false, 'ai-reset-status');
+                    status.add_child(glyph('mail-send-symbolic', 12, state.messageError ? 'ai-error' : 'ai-caption'));
+                    status.add_child(wrapped(state.messageSending ? 'Mensagem após reset: enviando…' : `Mensagem após reset: ${state.messageError}`,
+                        state.messageError ? 'ai-error' : 'ai-caption', {x_expand: true}));
+                    card.add_child(status);
                 }
-            } else {
-                for (const window of state.usage.windows) {
-                    const limit = box(true, 'ai-limit'), head = box(false, 'ai-limit-head');
-                    head.add_child(label(window.label, 'ai-limit-name'));
-                    head.add_child(label('·', 'ai-caption ai-dot'));
-                    if (!waitingForMessage(window)) head.add_child(resetIcon());
-                    head.add_child(label(waitingForMessage(window) ? 'aguardando mensagem' : resetShort(window.reset, format), 'ai-caption', {x_expand: true}));
-                    const percent = Math.round(window.remaining);
-                    head.add_child(label(`${percent}% restante`, percent <= 15 ? 'ai-percent ai-percent-low' : 'ai-percent'));
-                    limit.add_child(head);
-                    limit.add_child(this._bar(window.remaining, `${window.label}: ${percent}% restante`));
-                    card.add_child(limit);
+                if (state?.error) {
+                    const callout = box(false, 'ai-callout');
+                    callout.add_child(glyph('dialog-warning-symbolic', 16, 'ai-callout-icon'));
+                    const text = box(true, 'ai-callout-text', {x_expand: true});
+                    text.add_child(label(state.usage ? 'Dados desatualizados' : 'Não foi possível atualizar', 'ai-callout-title', {x_align: Clutter.ActorAlign.START}));
+                    text.add_child(wrapped(state.error, 'ai-caption'));
+                    if (state.usage) text.add_child(wrapped(`Última consulta: ${updatedLabel(state.updated).replace(/^Atualizado/, 'atualizado')}.`, 'ai-caption'));
+                    if (state.retryAt) text.add_child(wrapped(`Nova tentativa automática: ${resetShort(state.retryAt / 1000, format)}.`, 'ai-caption'));
+                    callout.add_child(text); card.add_child(callout);
                 }
-                const extra = state.usage.extra;
-                if (extra) {
-                    const limit = box(true, 'ai-limit ai-limit-extra'), head = box(false, 'ai-limit-head');
-                    head.add_child(label('Uso extra', 'ai-limit-name'));
-                    head.add_child(label('·', 'ai-caption ai-dot'));
-                    head.add_child(label(extra.limit == null ? 'créditos' : `${extra.used ?? 0} de ${extra.limit} créditos`, 'ai-caption', {x_expand: true}));
-                    head.add_child(label('Usado', 'ai-caption ai-remaining'));
-                    head.add_child(label(extra.utilization == null ? '--' : `${Math.round(extra.utilization)}%`, 'ai-percent')); limit.add_child(head);
-                    if (extra.utilization != null) limit.add_child(this._bar(100 - extra.utilization, `Uso extra: ${Math.round(extra.utilization)}% usado`));
-                    card.add_child(limit);
+                if (!state?.usage) {
+                    if (!state?.error) {
+                        const limit = box(true, 'ai-limit');
+                        limit.add_child(label('Consultando…', 'ai-caption', {x_align: Clutter.ActorAlign.START}));
+                        limit.add_child(this._bar(0, 'Consultando')); card.add_child(limit);
+                    }
+                } else {
+                    for (const window of state.usage.windows) card.add_child(this._windowRow(window, format));
+                    const extra = state.usage.extra;
+                    if (extra) {
+                        const row = box(false, 'ai-limit-row ai-limit-extra');
+                        row.add_child(label('Extra', 'ai-limit-name'));
+                        if (extra.utilization != null) row.add_child(this._bar(100 - extra.utilization, `Uso extra: ${Math.round(extra.utilization)}% usado`));
+                        else row.add_child(new St.Widget({x_expand: true}));
+                        row.add_child(label(extra.utilization == null ? '--' : `${Math.round(extra.utilization)}%`, 'ai-percent', {x_align: Clutter.ActorAlign.END}));
+                        row.add_child(label(extra.limit == null ? 'créditos' : `${extra.used ?? 0}/${extra.limit}`, 'ai-reset-text', {x_align: Clutter.ActorAlign.END}));
+                        tooltip(row, 'Uso extra (créditos): quanto já foi usado');
+                        card.add_child(row);
+                    }
                 }
+                section.add_child(card);
             }
-            this._body.add_child(card);
+            this._body.add_child(section);
         }
         // Keep the scroll position across rebuilds so refreshes don't jump the list.
         if (scrollValue > 0) GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -509,23 +500,15 @@ export default class AIUsageExtension extends Extension {
         if (this._themeSignal) this._systemSettings.disconnect(this._themeSignal);
         if (this._accentSignal) this._systemSettings.disconnect(this._accentSignal);
         this._themeSignal = this._accentSignal = 0; this._systemSettings = null;
-        this._keymapCancellable?.cancel();
-        this._keymapCancellable = null;
-        if (this._printSignal) global.display.disconnect(this._printSignal);
-        if (this._printMenuSignal) this._indicator.menu.disconnect(this._printMenuSignal);
-        if (this._menuSignal) this._indicator.menu.disconnect(this._menuSignal);
-        this._printMenuSignal = this._menuSignal = 0;
-        this._restorePrintBindings();
-        this._printSignal = 0;
         this._refresh?.destroy(); this._refresh = null;
         if (this._minute) GLib.Source.remove(this._minute);
         this._stopSpin();
         this._minute = 0;
         for (const signal of this._signals ?? []) this._settings.disconnect(signal);
         this._signals = [];
-        this._indicator?.destroy(); this._indicator = null;
+        this._notch?.destroy(); this._notch = null;
         this._settings = null; this._accounts = null; this._editor = null; this._resetHelp = null;
-        this._body = null; this._root = null; this._top = null;
+        this._body = null; this._root = null; this._top = null; this._pulse = null; this._header = null; this._footer = null; this._status = null; this._title = null; this._backButton = null; this._settingsButton = null;
         this._refreshIcon = null; this._refreshButton = null; this._scroll = null;
     }
 }

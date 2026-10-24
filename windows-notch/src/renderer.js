@@ -55,7 +55,7 @@ function resetTitle(w) {
 
 function label(a) {
   const w = mainWindow(a);
-  return `${PROVIDERS[a.provider].name} ${a.name}: ${a.ok ? `${Math.round(w.remaining)}% restante` : a.error}`;
+  return `${PROVIDERS[a.provider].name} ${a.name}: ${a.ok ? `${Math.round(w.remaining)}% restante${a.stale ? ' (desatualizado)' : ''}` : a.error}`;
 }
 
 function renderCompact(byProv) {
@@ -64,12 +64,12 @@ function renderCompact(byProv) {
     const items = $(`.group[data-p="${p}"] .items`);
     const multi = list.length > 1;
     items.replaceChildren(...list.map(a => {
-      const chip = el('span', a.ok ? 'chip' : 'chip err');
+      const chip = el('span', a.ok && !a.stale ? 'chip' : 'chip err');
       chip.title = label(a);
       chip.append(ring(a, multi));
       if (!multi) {
         const w = mainWindow(a);
-        chip.append(el('b', null, w ? `${Math.round(w.remaining)}%` : '--'));
+        chip.append(el('b', null, w ? `${a.stale ? '!' : ''}${Math.round(w.remaining)}%` : '--'));
       }
       return chip;
     }));
@@ -115,6 +115,7 @@ function renderPanel(byProv) {
         if (a.plan) ah.append(el('span', 'plan', a.plan));
         acc.append(ah);
       }
+      if (a.ok && a.stale) acc.append(el('p', 'error stale', `Dados desatualizados: ${a.error}`));
       if (a.ok) for (const w of a.windows) acc.append(windowRow(w));
       else acc.append(el('p', 'error', a.error));
       sec.append(acc);
@@ -131,7 +132,9 @@ function render() {
   renderCompact(byProv);
   renderPanel(byProv);
   const t = new Date(data.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  $('#updated').textContent = `Atualizado às ${t} · % restante`;
+  const retry = data.retryAt && data.retryAt > Date.now()
+    ? ` · nova tentativa às ${new Date(data.retryAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '';
+  $('#updated').textContent = `Atualizado às ${t} · % restante${retry}`;
   fit();
 }
 
