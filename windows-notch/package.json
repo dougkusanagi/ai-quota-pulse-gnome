@@ -1,0 +1,17 @@
+{
+  "name": "ai-quota-notch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Indicador discreto estilo notch para limites do Claude e Codex no Windows",
+  "main": "src/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "test": "bun test"
+  },
+  "trustedDependencies": ["electron"],
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}

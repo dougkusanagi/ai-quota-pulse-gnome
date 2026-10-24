@@ -94,6 +94,6 @@ Veja [validação e compatibilidade](docs/VALIDATION.md). As capturas de teste u
 
 Todos os timers, sinais, bindings, efeitos e requests são removidos ao desabilitar. Subprocessos dos CLIs são iniciados apenas para contas com mensagem após reset ativada, sem interpretação de shell. Trocar o provider/diretório de uma conta invalida imediatamente a quota daquele perfil.
 
-## Projeto Windows existente
+## Windows (protótipo)
 
-O widget Windows anterior permanece no repositório. Suas instruções estão em [docs/WINDOWS.md](docs/WINDOWS.md).
+Indicador discreto no topo da tela, no estilo do notch do MacBook. Veja [windows-notch/README.md](windows-notch/README.md).
