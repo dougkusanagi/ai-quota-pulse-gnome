@@ -3,9 +3,10 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { fetchAll, demo } = require('./usage');
 
-const DEMO = process.argv.includes('--demo');
+const demoArg = process.argv.find(a => a.startsWith('--demo'));
+const DEMO = demoArg ? Number(demoArg.split('=')[1] ?? 1) : 0;
 // Área máxima (painel aberto). O resto é transparente e deixa o mouse passar.
-const W = 400, H = 320;
+const W = 460, H = 640;
 const REFRESH_MS = 5 * 60e3;
 const THEMES = ['light', 'dark', 'system'];
 let win, timer, last = null;
@@ -28,7 +29,7 @@ function place() {
 async function refresh() {
   if (!win) return;
   win.webContents.send('loading', true);
-  try { last = { at: Date.now(), ...(DEMO ? demo() : await fetchAll()) }; }
+  try { last = { at: Date.now(), accounts: DEMO ? demo(DEMO) : await fetchAll() }; }
   finally {
     win.webContents.send('usage', last);
     win.webContents.send('loading', false);

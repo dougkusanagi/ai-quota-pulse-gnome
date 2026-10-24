@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "demo": "electron . --demo",
+    "demo:multi": "electron . --demo=2",
     "test": "bun test"
   },
   "trustedDependencies": ["electron"],

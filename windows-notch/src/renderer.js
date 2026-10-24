@@ -1,76 +1,157 @@
 const $ = (s, el = document) => el.querySelector(s);
 const api = window.notch;
 const notchEl = $('#notch');
-const CIRC = 50.27;
+const PROVIDERS = { claude: { name: 'Claude', icon: '#i-claude', cls: 'logo claude' }, codex: { name: 'Codex', icon: '#i-openai', cls: 'logo' } };
+const SVG = 'http://www.w3.org/2000/svg';
 let data = null, closeTimer = null;
 
 const color = r => r > 40 ? 'var(--ok)' : r > 15 ? 'var(--warn)' : 'var(--bad)';
+const mainWindow = a => a.ok ? a.windows.find(w => w.minutes === 300) ?? a.windows[0] : null;
 
-function fmtReset(ms) {
-  if (!ms) return 'aguardando mensagem para iniciar';
-  const diff = ms - Date.now();
-  if (diff <= 0) return 'disponível agora';
-  const m = Math.round(diff / 60e3);
-  const rel = m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}` : `${Math.round(m / 1440)} dias`;
-  const d = new Date(ms);
-  const sameDay = d.toDateString() === new Date().toDateString();
-  const when = d.toLocaleString('pt-BR', sameDay ? { hour: '2-digit', minute: '2-digit' } : { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-  return `renova em ${rel} · ${when}`;
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+// Anel de progresso; com várias contas, as iniciais ficam no centro.
+function ring(account, withInitials) {
+  const wrap = el('span', withInitials ? 'ring big' : 'ring');
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  for (const cls of ['track', 'val']) {
+    const c = document.createElementNS(SVG, 'circle');
+    c.setAttribute('cx', 10); c.setAttribute('cy', 10); c.setAttribute('r', 8);
+    c.setAttribute('pathLength', 100); c.setAttribute('class', cls);
+    svg.append(c);
+  }
+  const w = mainWindow(account);
+  const val = svg.lastChild;
+  val.style.strokeDashoffset = w ? 100 - w.remaining : 100;
+  if (w) val.style.stroke = color(w.remaining);
+  wrap.append(svg);
+  if (withInitials) wrap.append(el('i', null, account.ok ? account.initials : '!'));
+  return wrap;
+}
+
+function relTime(ms) {
+  const m = Math.max(0, Math.round((ms - Date.now()) / 60e3));
+  if (m < 60) return `${m} min`;
+  if (m < 1440) return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}`;
+  return `${Math.round(m / 1440)} dias`;
+}
+function resetText(w) {
+  if (!w.reset) return w.minutes === 300 ? 'sem uso' : '—';
+  if (w.reset <= Date.now()) return 'agora';
+  const d = new Date(w.reset);
+  if (d.toDateString() === new Date().toDateString()) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', '');
+}
+function resetTitle(w) {
+  if (!w.reset) return w.minutes === 300 ? 'Janela sem uso: começa na próxima mensagem' : 'Renovação não informada';
+  return `Renova em ${relTime(w.reset)} (${new Date(w.reset).toLocaleString('pt-BR')})`;
+}
+
+function label(a) {
+  const w = mainWindow(a);
+  return `${PROVIDERS[a.provider].name} ${a.name}: ${a.ok ? `${Math.round(w.remaining)}% restante` : a.error}`;
+}
+
+function renderCompact(byProv) {
+  for (const p of Object.keys(PROVIDERS)) {
+    const list = byProv[p];
+    const items = $(`.group[data-p="${p}"] .items`);
+    const multi = list.length > 1;
+    items.replaceChildren(...list.map(a => {
+      const chip = el('span', a.ok ? 'chip' : 'chip err');
+      chip.title = label(a);
+      chip.append(ring(a, multi));
+      if (!multi) {
+        const w = mainWindow(a);
+        chip.append(el('b', null, w ? `${Math.round(w.remaining)}%` : '--'));
+      }
+      return chip;
+    }));
+    $(`.group[data-p="${p}"]`).hidden = !list.length;
+  }
+}
+
+function windowRow(w) {
+  const r = Math.round(w.remaining);
+  const row = el('div', 'row');
+  const bar = el('div', 'bar');
+  const fill = el('i');
+  fill.style.width = `${r}%`; fill.style.background = color(r);
+  bar.append(fill);
+  const reset = el('span', 'reset', resetText(w));
+  row.title = resetTitle(w);
+  row.append(el('span', 'lbl', w.minutes === 300 ? '5h' : w.minutes === 10080 ? 'Semana' : w.label), bar, el('span', 'pct', `${r}%`), reset);
+  return row;
+}
+
+function renderPanel(byProv) {
+  const body = $('#body');
+  body.replaceChildren();
+  for (const [p, info] of Object.entries(PROVIDERS)) {
+    const list = byProv[p];
+    if (!list.length) continue;
+    const multi = list.length > 1;
+    const sec = el('section', 'prov');
+    const head = el('header');
+    const logo = document.createElementNS(SVG, 'svg');
+    logo.setAttribute('class', info.cls);
+    const use = document.createElementNS(SVG, 'use');
+    use.setAttribute('href', info.icon);
+    logo.append(use);
+    head.append(logo, el('h2', null, info.name));
+    if (!multi && list[0].plan) head.append(el('span', 'plan', list[0].plan));
+    sec.append(head);
+    for (const a of list) {
+      const acc = el('div', 'account');
+      if (multi) {
+        const ah = el('div', 'acc-head');
+        ah.append(el('span', 'badge', a.initials), el('span', 'acc-name', a.name));
+        if (a.plan) ah.append(el('span', 'plan', a.plan));
+        acc.append(ah);
+      }
+      if (a.ok) for (const w of a.windows) acc.append(windowRow(w));
+      else acc.append(el('p', 'error', a.error));
+      sec.append(acc);
+    }
+    body.append(sec);
+  }
+  if (!body.children.length) body.append(el('p', 'error', 'Nenhum login encontrado. Entre no Claude Code ou no Codex CLI e clique em Atualizar.'));
 }
 
 function render() {
   if (!data) return;
-  for (const p of ['claude', 'codex']) {
-    const info = data[p];
-    const chip = $(`.chip[data-p="${p}"]`);
-    const sec = $(`.prov[data-p="${p}"]`);
-    const rows = $('.rows', sec);
-    $('.plan', sec).textContent = info.ok ? info.plan ?? '' : '';
-    chip.classList.toggle('err', !info.ok);
-    const main = info.ok ? info.windows.find(w => w.minutes === 300) ?? info.windows[0] : null;
-    const val = $('.val', chip);
-    if (main) {
-      const r = Math.round(main.remaining);
-      $('b', chip).textContent = `${r}%`;
-      val.style.strokeDashoffset = CIRC * (1 - r / 100);
-      val.style.stroke = color(r);
-    } else {
-      $('b', chip).textContent = '--';
-      val.style.strokeDashoffset = CIRC;
-    }
-    chip.title = info.ok ? `${p === 'claude' ? 'Claude' : 'Codex'}: ${main ? Math.round(main.remaining) : '--'}% restante` : info.error;
-    rows.replaceChildren();
-    if (!info.ok) {
-      const e = document.createElement('p');
-      e.className = 'error'; e.textContent = info.error;
-      rows.append(e);
-      continue;
-    }
-    for (const w of info.windows) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const r = Math.round(w.remaining);
-      row.innerHTML = '<span class="lbl"></span><div class="bar"><i></i></div><span class="pct"></span><span class="reset"></span>';
-      $('.lbl', row).textContent = w.label;
-      $('.pct', row).textContent = `${r}%`;
-      $('.reset', row).textContent = fmtReset(w.reset);
-      const fill = $('.bar i', row);
-      fill.style.width = `${r}%`; fill.style.background = color(r);
-      rows.append(row);
-    }
-  }
+  const byProv = { claude: [], codex: [] };
+  for (const a of data.accounts) byProv[a.provider]?.push(a);
+  renderCompact(byProv);
+  renderPanel(byProv);
   const t = new Date(data.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  $('#updated').textContent = `Atualizado às ${t} · restante`;
+  $('#updated').textContent = `Atualizado às ${t} · % restante`;
+  fit();
+}
+
+// O notch acompanha o tamanho do conteúdo, fechado ou aberto.
+function fit() {
+  const open = notchEl.classList.contains('open');
+  notchEl.style.width = `${open ? $('#panel').offsetWidth : $('#compact').offsetWidth}px`;
+  notchEl.style.height = `${open ? $('#panel').offsetHeight : 30}px`;
 }
 
 function open() {
   clearTimeout(closeTimer);
   api.interactive(true);
   notchEl.classList.add('open');
+  fit();
 }
 function close() {
   closeTimer = setTimeout(() => {
     notchEl.classList.remove('open');
+    fit();
     api.interactive(false);
   }, 220);
 }
@@ -92,5 +173,6 @@ for (const b of document.querySelectorAll('.theme button')) {
   b.addEventListener('click', () => { setThemeUI(b.dataset.t); api.setTheme(b.dataset.t); });
 }
 api.prefs().then(p => setThemeUI(p.theme));
+fit();
 
-setInterval(render, 30e3); // mantém o "renova em" atual
+setInterval(render, 30e3); // mantém os horários atuais

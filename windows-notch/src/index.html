@@ -11,20 +11,13 @@
   <span class="ear left"></span><span class="ear right"></span>
 
   <div class="compact" id="compact">
-    <div class="chip" data-p="claude"><svg class="logo claude" role="img" aria-label="Claude"><use href="#i-claude"/></svg><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><circle class="val" cx="10" cy="10" r="8"/></svg><b>--</b></div>
+    <div class="group" data-p="claude"><svg class="logo claude" role="img" aria-label="Claude"><use href="#i-claude"/></svg><div class="items"></div></div>
     <span class="dot" id="pulse"></span>
-    <div class="chip" data-p="codex"><svg class="logo" role="img" aria-label="Codex"><use href="#i-openai"/></svg><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><circle class="val" cx="10" cy="10" r="8"/></svg><b>--</b></div>
+    <div class="group" data-p="codex"><div class="items"></div><svg class="logo" role="img" aria-label="Codex"><use href="#i-openai"/></svg></div>
   </div>
 
   <div class="panel" id="panel">
-    <section class="prov" data-p="claude">
-      <header><svg class="logo claude" aria-hidden="true"><use href="#i-claude"/></svg><h2>Claude</h2><span class="plan"></span></header>
-      <div class="rows"></div>
-    </section>
-    <section class="prov" data-p="codex">
-      <header><svg class="logo" aria-hidden="true"><use href="#i-openai"/></svg><h2>Codex</h2><span class="plan"></span></header>
-      <div class="rows"></div>
-    </section>
+    <div class="body" id="body"></div>
     <footer>
       <span id="updated">Consultando…</span>
       <div class="theme" role="radiogroup" aria-label="Tema">
