@@ -1,5 +1,6 @@
 const $ = (s, el = document) => el.querySelector(s);
-const notch = $('#notch');
+const api = window.notch;
+const notchEl = $('#notch');
 const CIRC = 50.27;
 let data = null, closeTimer = null;
 
@@ -64,32 +65,32 @@ function render() {
 
 function open() {
   clearTimeout(closeTimer);
-  window.notch.interactive(true);
-  notch.classList.add('open');
+  api.interactive(true);
+  notchEl.classList.add('open');
 }
 function close() {
   closeTimer = setTimeout(() => {
-    notch.classList.remove('open');
-    window.notch.interactive(false);
+    notchEl.classList.remove('open');
+    api.interactive(false);
   }, 220);
 }
-notch.addEventListener('mouseenter', open);
-notch.addEventListener('mouseleave', close);
+notchEl.addEventListener('mouseenter', open);
+notchEl.addEventListener('mouseleave', close);
 
-window.notch.onUsage(d => { data = d; render(); });
-window.notch.onLoading(on => {
+api.onUsage(d => { data = d; render(); });
+api.onLoading(on => {
   $('#pulse').classList.toggle('busy', on);
   $('#refresh').classList.toggle('spin', on);
 });
-$('#refresh').addEventListener('click', () => window.notch.refresh());
-$('#more').addEventListener('click', () => window.notch.menu());
+$('#refresh').addEventListener('click', () => api.refresh());
+$('#more').addEventListener('click', () => api.menu());
 
 function setThemeUI(t) {
   for (const b of document.querySelectorAll('.theme button')) b.setAttribute('aria-checked', String(b.dataset.t === t));
 }
 for (const b of document.querySelectorAll('.theme button')) {
-  b.addEventListener('click', () => { setThemeUI(b.dataset.t); window.notch.setTheme(b.dataset.t); });
+  b.addEventListener('click', () => { setThemeUI(b.dataset.t); api.setTheme(b.dataset.t); });
 }
-window.notch.prefs().then(p => setThemeUI(p.theme));
+api.prefs().then(p => setThemeUI(p.theme));
 
 setInterval(render, 30e3); // mantém o "renova em" atual
