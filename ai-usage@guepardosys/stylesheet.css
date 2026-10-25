@@ -5,8 +5,13 @@
 .ai-panel-indicator .ai-logo-panel { color: #f5f5f7; }
 .ai-panel-indicator .ai-ring { color: rgba(255,255,255,0.2); }
 .ai-popup-item { padding: 0; }
-.ai-menu .popup-menu-content { padding: 0; background-color: #fbfbfd; color: #1d1d1f; }
-.ai-menu.ai-dark .popup-menu-content { background-color: #171717; color: #f5f5f7; }
+.ai-menu { -arrow-rise: 0; -arrow-base: 0; -arrow-border-width: 0; -arrow-background-color: transparent; -arrow-border-color: transparent; -boxpointer-gap: 0; margin: 0; }
+.ai-menu .popup-menu-content { padding: 0; margin: 0; background-color: transparent; border: none; border-radius: 0; box-shadow: none; }
+.ai-notch-wrap { spacing: 0; }
+.ai-ear { color: #fbfbfd; }
+.ai-menu.ai-dark .ai-ear { color: #000000; }
+.ai-notch { background-color: #fbfbfd; border-radius: 0 0 22px 22px; color: #1d1d1f; }
+.ai-menu.ai-dark .ai-notch { background-color: #000000; color: #f5f5f7; }
 .ai-top-group { spacing: 7px; }
 .ai-top-items { spacing: 6px; }
 .ai-chip-top { spacing: 5px; }
