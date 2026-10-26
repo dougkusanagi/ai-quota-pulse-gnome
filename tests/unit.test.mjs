@@ -91,3 +91,13 @@ test('session reset stays hidden until usage starts and disappears when elapsed'
     assert.equal(shouldSendResetMessage({windows: [{...window, reset: null}]}, 0, now), false);
     assert.equal(shouldSendResetMessage({windows: [{...window, kind: 'scoped'}]}, 0, now), false);
 });
+
+test('login helper follows the provider and safely quotes profile directories', async () => {
+    const {loginCommand} = await import('../ai-usage@guepardosys/utils/login.js');
+    assert.equal(loginCommand('openai', '~/.codex-work'), `CODEX_HOME="$HOME"/'.codex-work' codex login`);
+    assert.equal(loginCommand('claude', '/tmp/work profile'), "CLAUDE_CONFIG_DIR='/tmp/work profile' claude");
+    assert.equal(loginCommand('openai', '  '), '');
+    assert.equal(loginCommand('openai', '~'), 'CODEX_HOME="$HOME" codex login');
+    assert.equal(loginCommand('openai', "/tmp/$(touch nope)`id`"), "CODEX_HOME='/tmp/$(touch nope)`id`' codex login");
+    assert.ok(loginCommand('openai', "/tmp/it's").includes("'\\''"));
+});

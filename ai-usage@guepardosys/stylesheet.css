@@ -315,3 +315,5 @@
 .ai-reset-icon { color: #646870; margin-right: 4px; }
 .ai-dark .ai-reset-icon { color: #a1a4ab; }
 .ai-tooltip { background-color: #2c2c2e; color: white; font-size: 11px; padding: 3px 8px; border-radius: 6px; }
+
+.ai-login-help { padding: 0 14px 10px; }

@@ -1,4 +1,5 @@
 import St from 'gi://St';
+import {loginCommand} from './utils/login.js';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -421,6 +422,13 @@ export default class AIUsageExtension extends Extension {
         const providerRow = box(false, 'ai-row');
         providerRow.add_child(label('Serviço', 'ai-row-title ai-field-title'));
         const name = field('Nome', account.name ?? ''), path = field('Diretório', account.profilePath ?? defaultPath(provider), 'Perfil / diretório');
+        const loginHelp = wrapped('', 'ai-caption ai-login-help', {x_expand: true});
+        loginHelp.clutter_text.set_selectable(true);
+        const syncLogin = () => {
+            const command = loginCommand(provider, path.entry.text);
+            loginHelp.text = command ? `Para entrar nesta conta:\n${command}` : 'Informe o diretório para ver o comando de login.';
+        };
+        path.entry.clutter_text.connect('text-changed', syncLogin);
         const initials = field('Iniciais', account.initials ?? ''); initials.entry.clutter_text.max_length = 3;
         const color = field('Hex', account.color ?? '#0A84FF', 'Cor em hexadecimal');
         const palette = box(false, 'ai-palette', {x_expand: true});
@@ -444,7 +452,7 @@ export default class AIUsageExtension extends Extension {
         let providerWidget = segmented('Serviço', [['openai', 'Codex'], ['claude', 'Claude']], provider, value => {
             const old = provider; provider = value;
             if (path.entry.text === defaultPath(old)) path.entry.text = defaultPath(value);
-            live = null; sync();
+            live = null; sync(); syncLogin();
         });
         providerWidget.x_expand = true; providerRow.add_child(providerWidget);
         for (const value of swatchSet) {
@@ -455,7 +463,8 @@ export default class AIUsageExtension extends Extension {
             swatches.push([swatch, value]); palette.add_child(swatch);
         }
         const paletteRow = box(false, 'ai-row'); paletteRow.add_child(label('Cor', 'ai-row-title ai-field-title')); paletteRow.add_child(palette);
-        body.add_child(group(providerRow, name.row, path.row, initials.row));
+        body.add_child(group(providerRow, name.row, path.row, loginHelp, initials.row));
+        syncLogin();
         body.add_child(group(paletteRow, color.row));
         let autoResetMessage = account.autoResetMessage === true;
         const prompt = field('Prompt', account.resetPrompt ?? DEFAULT_RESET_PROMPT, 'Prompt da mensagem após reset');
