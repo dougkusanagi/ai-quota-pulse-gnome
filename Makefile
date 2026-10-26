@@ -25,7 +25,7 @@ test: build
 test-prefs: build
 	GI_TYPELIB_PATH=$(GNOME_LIBDIR)/girepository-1.0 LD_LIBRARY_PATH=$(GNOME_LIBDIR) GSETTINGS_BACKEND=memory gjs -m tests/preferences.js
 test-shell: build
-	for t in refresh feedback switches notch; do python3 tests/shell-$$t.py || exit 1; done
+	for t in refresh feedback switches notch editor; do python3 tests/shell-$$t.py || exit 1; done
 check:
 	python3 scripts/check.py
 debug:

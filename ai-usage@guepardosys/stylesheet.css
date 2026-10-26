@@ -114,8 +114,8 @@
 .ai-row-names { spacing: 1px; }
 .ai-row-title { font-size: 13px; }
 .ai-field-title { min-width: 64px; }
-/* The generic 28px row compresses St.Entry below its text + padding height. */
-.ai-field-row { min-height: 36px; }
+/* Let entries keep their natural text height, including glyph descenders. */
+.ai-field-row { min-height: 3em; }
 .ai-account-row { padding: 9px 10px 9px 14px; }
 .ai-row-actions { spacing: 0; }
 .ai-dim .ai-row-title, .ai-dim StIcon { opacity: 0.55; }
@@ -157,7 +157,7 @@
 .ai-switch.on .ai-switch-knob { margin-left: 14px; margin-right: 0; }
 .ai-switch:hover { background-color: rgba(0,0,0,0.28); }
 
-.ai-entry { padding: 6px 9px; border-radius: 8px; background-color: rgba(0,0,0,0.045); color: #1d1d1f; border: 1px solid transparent;
+.ai-entry { min-height: 40px; padding: 6px 9px; border-radius: 8px; background-color: rgba(0,0,0,0.045); color: #1d1d1f; border: 1px solid transparent;
     selected-color: white; caret-color: #1d1d1f; transition-duration: 120ms; }
 .ai-palette { spacing: 6px; padding: 2px 0; }
 .ai-swatch { width: 22px; height: 22px; border-radius: 11px; }

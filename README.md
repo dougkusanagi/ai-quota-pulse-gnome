@@ -36,7 +36,7 @@ CLAUDE_CONFIG_DIR="$HOME/.claude" claude
 CLAUDE_CONFIG_DIR="$HOME/.claude-work" claude
 ```
 
-No Claude Code, use `/login` quando necessário. Cadastre cada diretório separadamente. O editor mostra um comando de login selecionável abaixo do diretório e o atualiza ao digitar ou trocar o serviço. O campo perfil aceita `~/diretório` ou caminho absoluto, sem interpretação de comandos ou variáveis de shell. API keys de faturamento por tokens não expõem os limites de assinatura.
+No Claude Code, use `/login` quando necessário. Cadastre cada diretório separadamente. O editor mostra um comando de login selecionável com botão de copiar abaixo do diretório e o atualiza ao digitar ou trocar o serviço. O campo perfil aceita `~/diretório` ou caminho absoluto, sem interpretação de comandos ou variáveis de shell. API keys de faturamento por tokens não expõem os limites de assinatura.
 
 - Codex: lê `auth.json` existente; se não existir, consulta o formato **direto/legado** do Codex Auth via libsecret. O backend recente de Keyring gerenciado/encriptado do Codex ainda não é suportado. A falha é explicada na conta; não há extração genérica de segredos.
 - Claude: lê `.credentials.json` existente no diretório configurado, padrão Linux do Claude Code.

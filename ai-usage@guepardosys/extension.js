@@ -423,11 +423,27 @@ export default class AIUsageExtension extends Extension {
         const providerRow = box(false, 'ai-row');
         providerRow.add_child(label('Serviço', 'ai-row-title ai-field-title'));
         const name = field('Nome', account.name ?? ''), path = field('Diretório', account.profilePath ?? defaultPath(provider), 'Perfil / diretório');
-        const loginHelp = wrapped('', 'ai-caption ai-login-help', {x_expand: true});
-        loginHelp.clutter_text.set_selectable(true);
+        const loginHelp = box(true, 'ai-login-help', {x_expand: true});
+        const loginHeader = box(false, '', {x_expand: true});
+        const loginHint = wrapped('Para entrar nesta conta:', 'ai-caption', {x_expand: true});
+        const loginText = wrapped('', 'ai-caption', {x_expand: true, reactive: true});
+        loginText.clutter_text.set_selectable(true);
+        loginText.clutter_text.reactive = true;
+        const copyLogin = iconButton('edit-copy-symbolic', 'Copiar comando de login', () => {
+            const command = loginCommand(provider, path.entry.text);
+            if (!command) return;
+            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, command);
+            loginHint.text = 'Copiado.';
+        });
+        tooltip(copyLogin, 'Copiar comando');
+        loginHeader.add_child(loginHint); loginHeader.add_child(copyLogin);
+        loginHelp.add_child(loginHeader); loginHelp.add_child(loginText);
         const syncLogin = () => {
             const command = loginCommand(provider, path.entry.text);
-            loginHelp.text = command ? `Para entrar nesta conta:\n${command}` : 'Informe o diretório para ver o comando de login.';
+            loginHint.text = command ? 'Para entrar nesta conta:' : 'Informe o diretório para ver o comando de login.';
+            loginText.text = command;
+            loginText.visible = Boolean(command);
+            copyLogin.visible = Boolean(command);
         };
         path.entry.clutter_text.connect('text-changed', syncLogin);
         const initials = field('Iniciais', account.initials ?? ''); initials.entry.clutter_text.max_length = 3;
