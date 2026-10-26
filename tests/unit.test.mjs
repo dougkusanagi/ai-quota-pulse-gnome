@@ -71,12 +71,13 @@ test('compact reset fits the notch column', () => {
     assert.equal(resetCompact(null), '—');
 });
 
-test('session reset stays hidden until usage starts and disappears when elapsed', async () => {
+test('session reset uses the timestamp even at 100% and disappears when elapsed', async () => {
     const {waitingForMessage, visibleReset, shouldSendResetMessage} = await import('../ai-usage@guepardosys/utils/session.js');
     const now = 2000000000;
     const window = {minutes: 300, kind: 'main', remaining: 100, reset: now + 18000};
-    assert.equal(waitingForMessage(window, now), true);
-    assert.equal(visibleReset(window, now), null);
+    assert.equal(waitingForMessage(window, now), false);
+    assert.equal(visibleReset(window, now), now + 18000);
+    assert.equal(shouldSendResetMessage({windows: [window]}, 0, now), false);
     window.remaining = 99;
     assert.equal(visibleReset(window, now), now + 18000);
     window.reset = now - 1;
@@ -88,7 +89,11 @@ test('session reset stays hidden until usage starts and disappears when elapsed'
     window.reset = now + 300;
     assert.equal(shouldSendResetMessage(usage, 0, now), false);
     assert.equal(waitingForMessage({...window, minutes: 10080, remaining: 100}, now), false);
-    assert.equal(shouldSendResetMessage({windows: [{...window, reset: null}]}, 0, now), false);
+    assert.equal(shouldSendResetMessage({windows: [{...window, reset: null}]}, 0, now), true);
+    assert.equal(shouldSendResetMessage({windows: [{...window, reset: 0}]}, 0, now), true);
+    assert.equal(shouldSendResetMessage({windows: [{...window, reset: null}]}, now - 300, now), true);
+    assert.equal(shouldSendResetMessage({windows: [{minutes: 10080, kind: 'main'}]}, 0, now), true);
+    assert.equal(shouldSendResetMessage({windows: []}, 0, now), false);
     assert.equal(shouldSendResetMessage({windows: [{...window, kind: 'scoped'}]}, 0, now), false);
 });
 

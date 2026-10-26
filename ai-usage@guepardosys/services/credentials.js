@@ -57,6 +57,10 @@ export async function claudeCredentials(account, cancellable) {
     const auth = await readJSON(`${expandPath(account.profilePath)}/.credentials.json`, cancellable);
     const oauth = auth.claudeAiOauth;
     if (!oauth?.accessToken) throw new Error('Entre com uma assinatura Claude neste perfil pelo Claude Code.');
-    if (oauth.expiresAt && oauth.expiresAt < Date.now()) throw new Error('Login Claude expirado. Abra o Claude Code neste perfil para renovar.');
+    if (oauth.expiresAt && oauth.expiresAt < Date.now()) {
+        const error = new Error('Login Claude expirado. Abra o Claude Code neste perfil para renovar.');
+        error.authentication = true;
+        throw error;
+    }
     return {token: oauth.accessToken};
 }

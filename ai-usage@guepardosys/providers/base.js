@@ -24,7 +24,11 @@ export class UsageProvider {
             message.request_headers.remove('Authorization');
         }
         const status = message.status_code;
-        if (status === 401) throw new UsageError('Login expirado. Renove a autenticação pelo CLI deste perfil.');
+        if (status === 401) {
+            const error = new UsageError('Login expirado. Renove a autenticação pelo CLI deste perfil.');
+            error.authentication = true;
+            throw error;
+        }
         if (status === 403) throw new UsageError('Acesso recusado: confira a assinatura e permissões do login CLI.');
         if (status === 429) {
             const header = message.response_headers.get_one('Retry-After');

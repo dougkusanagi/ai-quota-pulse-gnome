@@ -114,6 +114,8 @@
 .ai-row-names { spacing: 1px; }
 .ai-row-title { font-size: 13px; }
 .ai-field-title { min-width: 64px; }
+/* The generic 28px row compresses St.Entry below its text + padding height. */
+.ai-field-row { min-height: 36px; }
 .ai-account-row { padding: 9px 10px 9px 14px; }
 .ai-row-actions { spacing: 0; }
 .ai-dim .ai-row-title, .ai-dim StIcon { opacity: 0.55; }

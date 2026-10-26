@@ -4,6 +4,7 @@ import Soup from 'gi://Soup?version=3.0';
 import {Accounts} from '../ai-usage@guepardosys/services/accounts.js';
 import {messageCommand, sendResetMessage, cliSearchPath, findCli, cliFailure} from '../ai-usage@guepardosys/services/reset-message.js';
 import {RefreshService} from '../ai-usage@guepardosys/services/refresh.js';
+import ClaudeProvider from '../ai-usage@guepardosys/providers/claude.js';
 import {UsageProvider, UsageError} from '../ai-usage@guepardosys/providers/base.js';
 import {codexCredentials, claudeCredentials} from '../ai-usage@guepardosys/services/credentials.js';
 const loop = new GLib.MainLoop(null, false);
@@ -52,7 +53,7 @@ async function main() {
     assert(accounts.list().find(a => a.id === autoAccount.id).resetPrompt === 'Diga oi.', 'prompt persisted');
     assert(accounts.list().find(a => a.id === 'id-1').autoResetMessage === false, 'disabled by default');
     let sends = 0, reads = 0, autoFailure = false;
-    const idleUsage = {windows: [{minutes: 300, kind: 'main', remaining: 100, reset: Date.now()/1000 + 18000}]};
+    const idleUsage = {windows: [{minutes: 300, kind: 'main', remaining: 100, reset: null}]};
     const autoProviders = {openai: {async getUsage() { reads++; return idleUsage; }, destroy() {}}};
     const autoAccounts = {list: () => [autoAccount]};
     const sender = async account => { assert(account.resetPrompt === 'Diga oi.', 'custom prompt used'); sends++; if (autoFailure) throw new Error('Fixture failure'); };
@@ -66,6 +67,31 @@ async function main() {
     await automated.refresh(); assert(automated.states.get('automation').messageError === 'Fixture failure', 'message failure visible separately');
     await automated.refresh(); assert(sends === 2, 'failure does not cause a send loop');
     automated.destroy();
+    settings.set_string('reset-message-attempts', '{}');
+    const beforeActive = sends;
+    automated = new RefreshService(autoAccounts, settings, () => {}, {
+        openai: {async getUsage() { return {windows: [{minutes: 300, kind: 'main', remaining: 100, reset: Date.now()/1000 + 15000}]}; }, destroy() {}},
+    }, sender);
+    await automated.refresh();
+    assert(sends === beforeActive, 'active reset at rounded 100% does not send again');
+    automated.destroy();
+    // Retry missing resets after the propagation grace period, including failed sends.
+    for (const usage of [
+        {windows: [{minutes: 300, kind: 'main', remaining: 99, reset: null}]},
+        {windows: [{minutes: 10080, kind: 'main', remaining: 80, reset: null}]},
+    ]) {
+        const key = JSON.stringify([autoAccount.id, autoAccount.provider, autoAccount.profilePath]);
+        settings.set_string('reset-message-attempts', JSON.stringify({[key]: Date.now()/1000 - 301}));
+        const before = sends;
+        automated = new RefreshService(autoAccounts, settings, () => {}, {
+            openai: {async getUsage() { return usage; }, destroy() {}},
+        }, sender);
+        await automated.refresh();
+        assert(sends === before + 1, 'missing reset retries after five minutes');
+        await automated.refresh();
+        assert(sends === before + 1, 'missing reset respects retry grace period');
+        automated.destroy();
+    }
     assert(messageCommand('claude', 'literal $(no-shell)')[messageCommand('claude', 'literal $(no-shell)').length - 1] === 'literal $(no-shell)', 'prompt is literal argv');
     const cliTmp = GLib.dir_make_tmp('aiusage-cli-test-XXXXXX');
     const savedPath = GLib.getenv('PATH');
@@ -121,6 +147,28 @@ async function main() {
         assert((await codexCredentials({profilePath:tmp},new Gio.Cancellable())).accountId==='fixture','Codex credential shape');
         assert((await claudeCredentials({profilePath:tmp},new Gio.Cancellable())).token==='fixture-not-a-secret','Claude credential shape');
     } finally {Gio.File.new_for_path(`${tmp}/auth.json`).delete(null);Gio.File.new_for_path(`${tmp}/.credentials.json`).delete(null);Gio.File.new_for_path(tmp).delete(null);}
+    // A concurrent Claude Code credential renewal recovers within the same refresh.
+    let credentialReads = 0, authRequests = 0, waits = 0;
+    const recovering = new ClaudeProvider(async () => ({token: ++credentialReads === 1 ? 'old-fixture' : 'new-fixture'}), async () => { waits++; });
+    recovering.request = async (_url, headers) => {
+        authRequests++;
+        if (headers.Authorization === 'Bearer old-fixture') {
+            const error = new Error('Expired'); error.authentication = true; throw error;
+        }
+        return {five_hour: {utilization: 5, resets_at: '2026-10-20T15:39:00Z'}};
+    };
+    assert((await recovering.getUsage({}, new Gio.Cancellable())).primary.remaining === 95, '401 recovers with reread credentials');
+    assert(credentialReads === 2 && authRequests === 2 && waits === 1, 'bounded auth retry rereads profile');
+    credentialReads = 0;
+    recovering.credentials = async () => { credentialReads++; const e = new Error('Expired'); e.authentication = true; throw e; };
+    let expired = false;
+    try { await recovering.getUsage({}, new Gio.Cancellable()); } catch (e) { expired = e.authentication; }
+    assert(expired && credentialReads === 3, 'persistent expiration is reported after bounded retries');
+    credentialReads = 0;
+    recovering.credentials = async () => { credentialReads++; throw new UsageError('Limited', 300, true); };
+    try { await recovering.getUsage({}, new Gio.Cancellable()); } catch { /* expected */ }
+    assert(credentialReads === 1, 'rate limits are never retried as authentication failures');
+    recovering.destroy();
     const server=new Soup.Server(); let targetHits=0;
     server.add_handler('/ok',(_s,msg)=>{msg.set_status(200,null);msg.set_response('application/json',Soup.MemoryUse.COPY,'{"ok":true}');});
     server.add_handler('/redirect',(_s,msg)=>{msg.set_redirect(302,`${server.get_uris()[0].to_string()}target`);});

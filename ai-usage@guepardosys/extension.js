@@ -232,7 +232,7 @@ export default class AIUsageExtension extends Extension {
         const help = box(true, 'ai-reset-help');
         help.add_child(label('Mensagem após reset de 5h', 'ai-row-title'));
         help.add_child(wrapped('Quando a janela de 5h estiver disponível, envia uma mensagem curta por esta conta. Isso inicia a próxima janela e usa um pouco do limite. Se já estiver disponível, envia ao ativar.', 'ai-caption'));
-        help.add_child(wrapped('Uma tentativa por janela. A extensão precisa estar ativa e o CLI da conta, autenticado.', 'ai-caption'));
+        help.add_child(wrapped('Se o reset continuar sem horário, tenta novamente após 5 minutos. A extensão precisa estar ativa e o CLI da conta, autenticado.', 'ai-caption'));
         help.add_child(button('Editar prompt', () => { this._editor = account; this._go('editor'); }, 'document-edit-symbolic'));
         help.visible = this._resetHelp.has(account.id);
         const helpButton = iconButton('mail-send-symbolic', `Ajuda: mensagem após reset · ${account.name}`, () => {
@@ -409,8 +409,9 @@ export default class AIUsageExtension extends Extension {
         let provider = account.provider ?? 'openai';
         const defaultPath = p => p === 'openai' ? '~/.codex' : '~/.claude';
         const field = (title, value, name = title) => {
-            const entry = new St.Entry({text: value, can_focus: true, style_class: 'ai-entry', x_expand: true, accessible_name: name});
-            const row = box(false, 'ai-row'); const l = label(title, 'ai-row-title ai-field-title'); row.add_child(l); row.add_child(entry);
+            const entry = new St.Entry({text: value, can_focus: true, style_class: 'ai-entry', x_expand: true,
+                y_align: Clutter.ActorAlign.CENTER, accessible_name: name});
+            const row = box(false, 'ai-row ai-field-row'); const l = label(title, 'ai-row-title ai-field-title'); row.add_child(l); row.add_child(entry);
             return {entry, row};
         };
         const preview = box(false, 'ai-card ai-preview');
